@@ -63,7 +63,7 @@ void OnVibrateEvent(DualsenseGamepadOutputReportData data)
     } else {
         digitalWrite(ledPin, HIGH);
     }
-    if (data.lightbar_setup>0 || data.lightbar_red>0 || data.lightbar_green>0 || data.lightbar_red>0 || data.mute_button_led>0 || data.player_leds>0){
+    if (data.lightbar_setup>0 || data.lightbar_red>0 || data.lightbar_green>0 || data.lightbar_blue>0 || data.mute_button_led>0 || data.player_leds>0){
         onLEDsetup(data);
     }
     Serial.println("Output event. Weak motor: " + String(data.motor_left) + " Strong motor: " + String(data.motor_right) + "LED change:" + data.lightbar_setup);
