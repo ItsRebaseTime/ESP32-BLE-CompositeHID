@@ -406,19 +406,19 @@ bool DualsenseGamepadDevice::isDPadPressedFlag(DualsenseDpadFlags direction)
 
     if (direction == DualsenseDpadFlags::NORTH) {
         return _inputReport.hat == DUALSENSE_BUTTON_DPAD_NORTH;
-    } else if (direction == (DualsenseDpadFlags::NORTH & DualsenseDpadFlags::EAST)) {
+    } else if (direction == (DualsenseDpadFlags::NORTH | DualsenseDpadFlags::EAST)) {
         return _inputReport.hat == DUALSENSE_BUTTON_DPAD_NORTHEAST;
     } else if (direction == DualsenseDpadFlags::EAST) {
         return _inputReport.hat == DUALSENSE_BUTTON_DPAD_EAST;
-    } else if (direction == (DualsenseDpadFlags::SOUTH & DualsenseDpadFlags::EAST)) {
+    } else if (direction == (DualsenseDpadFlags::SOUTH | DualsenseDpadFlags::EAST)) {
         return _inputReport.hat == DUALSENSE_BUTTON_DPAD_SOUTHEAST;
     } else if (direction == DualsenseDpadFlags::SOUTH) {
         return _inputReport.hat == DUALSENSE_BUTTON_DPAD_SOUTH;
-    } else if (direction == (DualsenseDpadFlags::SOUTH & DualsenseDpadFlags::WEST)) {
+    } else if (direction == (DualsenseDpadFlags::SOUTH | DualsenseDpadFlags::WEST)) {
         return _inputReport.hat == DUALSENSE_BUTTON_DPAD_SOUTHWEST;
     } else if (direction == DualsenseDpadFlags::WEST) {
         return _inputReport.hat == DUALSENSE_BUTTON_DPAD_WEST;
-    } else if (direction == (DualsenseDpadFlags::NORTH & DualsenseDpadFlags::WEST)) {
+    } else if (direction == (DualsenseDpadFlags::NORTH | DualsenseDpadFlags::WEST)) {
         return _inputReport.hat == DUALSENSE_BUTTON_DPAD_NORTHWEST;
     }
     return false;
