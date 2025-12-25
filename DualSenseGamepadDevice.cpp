@@ -326,7 +326,7 @@ void DualsenseGamepadDevice::setAccel(int16_t x, int16_t y, int16_t z)
     y = constrain(y, -DUALSENSE_ACC_RANGE, DUALSENSE_ACC_RANGE);
     z = constrain(z, -DUALSENSE_ACC_RANGE, DUALSENSE_ACC_RANGE);
 
-    if (_inputReport.accel_x != x || _inputReport.accel_y != y || _inputReport.accel_z) {
+    if (_inputReport.accel_x != x || _inputReport.accel_y != y || _inputReport.accel_z != z) {
         {
             std::lock_guard<std::mutex> lock(_mutex);
             _inputReport.accel_x = (uint16_t)(x + DUALSENSE_AXIS_CENTER_OFFSET);
