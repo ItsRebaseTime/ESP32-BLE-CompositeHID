@@ -193,7 +193,7 @@ struct DualsenseGamepadInputReportData {
     uint8_t data_54_74[18];
     uint8_t reserved3 = 0x00;
 
-    uint32_t crc32 = 0; // 1 bits for share/menu button + 7 bit padding (1 byte)
+    uint32_t crc32 = 0; // 4-byte CRC32 checksum
 } __attribute__((packed));
 #pragma pack(pop)
 struct DualsenseGamepadPairingReportdata {
