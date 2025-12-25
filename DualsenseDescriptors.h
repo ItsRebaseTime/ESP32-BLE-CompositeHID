@@ -106,7 +106,7 @@ static const uint8_t DualsenseEdge_FirmwareInfo[] {
     0x57
 };
 static const uint8_t DualsenseEdge_StockCalibration[] {
-    0x00, // Gyro Pirch Bias
+    0x00, // Gyro Pitch Bias
     0x00,
     0x00, // Gyro Yaw Bias
     0x00,
