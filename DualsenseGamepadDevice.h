@@ -51,9 +51,9 @@
 enum DualsenseDpadFlags : uint8_t {
     NONE = 0x08,
     NORTH = 0x00,
-    EAST = 0x01,
-    SOUTH = 0x02,
-    WEST = 0x04
+    EAST = 0x02,
+    SOUTH = 0x04,
+    WEST = 0x08
 };
 
 // Trigger range
