@@ -32,7 +32,7 @@ jobs:
           enable-deltas-report: true
           fqbn: esp32:esp32:esp32
           sketch-paths: |
-            # - examples/GamepadExamples/CharacteristicsConfiguration/CharacteristicsConfiguration.ino # disable because  esp_base_mac_addr_set is disabled in BleCompositeHID.cpp
+            - examples/GamepadExamples/CharacteristicsConfiguration/CharacteristicsConfiguration.ino # disable because  esp_base_mac_addr_set is disabled in BleCompositeHID.cpp
             - examples/GamepadExamples/DrivingControllerTest/DrivingControllerTest.ino
             - examples/GamepadExamples/FlightControllerTest/FlightControllerTest.ino
             - examples/GamepadExamples/Gamepad/Gamepad.ino
@@ -48,6 +48,7 @@ jobs:
             - examples/GamepadExamples/SpecialButtons/SpecialButtons.ino
             - examples/GamepadExamples/TestAll/TestAll.ino
             - examples/XInputExamples/XboxXInputController/XboxXInputController.ino
+            - examples/dualsenseExamples/Dualsense_Edge_Controller/Dualsense_Edge_Controller.ino
             - examples/KeyboardExamples/KeyboardLEDs/KeyboardLEDs.ino
             - examples/KeyboardExamples/MediaKeys/MediaKeys.ino
             - examples/KeyboardExamples/PressKey/PressKey.ino
