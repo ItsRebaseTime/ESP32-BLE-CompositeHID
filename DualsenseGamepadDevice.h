@@ -1,6 +1,7 @@
 #ifndef DUALSENSE_GAMEPAD_DEVICE_H
 #define DUALSENSE_GAMEPAD_DEVICE_H
 
+#include <cstddef>
 #include <Callback.h>
 #include <NimBLECharacteristic.h>
 #include <cstdint>
@@ -11,7 +12,6 @@
 #include "DualsenseDescriptors.h"
 #include "DualsenseGamepadConfiguration.h"
 #include "GamepadDevice.h"
-#include "esp_mac.h"
 // Button bitmasks
 #define DUALSENSE_BUTTON_Y 0x08
 #define DUALSENSE_BUTTON_B 0x04

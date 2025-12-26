@@ -4,6 +4,7 @@
 #include <cstdint>
 #include <stdint.h>
 #include <string.h>
+#include "esp_mac.h"
 #if defined(CONFIG_ARDUHAL_ESP_LOG)
 #include "esp32-hal-log.h"
 #define LOG_TAG "DualsenseGamepadDevice"
