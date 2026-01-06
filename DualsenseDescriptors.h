@@ -355,10 +355,9 @@ static const uint8_t DualsenseEdge_HIDDescriptor[] {
     0x09, 0x2F, //   Usage (0x2F)
     0x95, 0x07, //   Report Count (7)
     0xB1, 0x02, //   Feature (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position,Non-volatile)
-    0xC0, // End Collection
-    0x00 // Unknown (bTag: 0x00, bType: 0x00)
+    0xC0 // End Collection
 
-    // 429 bytes
+    // 428 bytes
 };
-static_assert(sizeof(DualsenseEdge_HIDDescriptor) == 429, "Wrong size");
+static_assert(sizeof(DualsenseEdge_HIDDescriptor) == 428, "Wrong size");
 #endif
