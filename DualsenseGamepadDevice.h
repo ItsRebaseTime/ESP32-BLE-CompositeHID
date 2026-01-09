@@ -254,7 +254,7 @@ public:
     void init(NimBLEHIDDevice* hid) override;
     const BaseCompositeDeviceConfiguration* getDeviceConfig() const override;
 
-    Signal<DualsenseGamepadOutputReportData> onVibrate;
+    Signal<DualsenseGamepadOutputReportData> onReceivedOutputReport;
 
     // Input Controls
     void resetInputs();

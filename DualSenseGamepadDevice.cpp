@@ -42,7 +42,7 @@ void DualsenseGamepadCallbacks::onWrite(NimBLECharacteristic* pCharacteristic, N
         return;
     }
 
-    _device->onVibrate.fire(OutputData);
+    _device->onReceivedOutputReport.fire(OutputData);
 }
 
 void DualsenseGamepadCallbacks::onRead(NimBLECharacteristic* pCharacteristic, NimBLEConnInfo& connInfo)
