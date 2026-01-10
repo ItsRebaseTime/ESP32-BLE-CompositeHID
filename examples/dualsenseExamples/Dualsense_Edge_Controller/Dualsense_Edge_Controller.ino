@@ -1,15 +1,35 @@
-#include <BleConnectionStatus.h>
+/*
+ * DualSense Edge Controller Example
+ *
+ * This example emulates a Sony DualSense Edge controller over BLE.
+ *
+ * IMPORTANT NOTE ON HAPTICS/VIBRATION:
+ * Real DualSense controllers do NOT support haptic feedback over Bluetooth on Windows/PC.
+ * Sony's haptic system is audio-based and requires a USB connection to expose the controller
+ * as an audio device. Over Bluetooth, only basic rumble and adaptive triggers are supported
+ * (and support varies by application). This is a hardware/protocol limitation of the
+ * DualSense design, not a limitation of this library.
+ *
+ * The onReceivedOutputReport callback will still fire for any output reports that ARE sent
+ * (such as LED color changes), but don't expect haptic/vibration commands from applications
+ * like Steam when connected over Bluetooth.
+ */
 
+#include <BleConnectionStatus.h>
 #include <BleCompositeHID.h>
 #include <DualsenseGamepadDevice.h>
 #define CONFIG_BT_NIMBLE_EXT_ADV 1
 
-int ledPin = 8; // LED connected to digital pin 13
+int ledPin = LED_BUILTIN; // LED connected to digital pin 8
 uint8_t playerLEDs = 0x00;
-uint8_t ledcolor[3] = {0,0,0}; 
+uint8_t ledcolor[3] = {0,0,0};
 uint8_t muteled = 0;
 DualsenseGamepadDevice* dualsense;
 BleCompositeHID compositeHID("Libresteishon Edge", "YeaSeb", 100);
+
+// FunctionSlots must be global to persist after setup() completes
+FunctionSlot<DualsenseGamepadOutputReportData> vibrationSlot(OnVibrateEvent);
+FunctionSlot<DualsenseGamepadOutputReportData> ledSlot(OnLEDEvent);
 
 void OnLEDEvent(DualsenseGamepadOutputReportData data)
 {
@@ -59,6 +79,7 @@ void OnLEDEvent(DualsenseGamepadOutputReportData data)
         Serial.println(String("Mute button change: ")+muteled);
     }
 }
+
 void OnVibrateEvent(DualsenseGamepadOutputReportData data)
 {
     if (data.motor_right > 0 || data.motor_left > 0) {
@@ -67,8 +88,8 @@ void OnVibrateEvent(DualsenseGamepadOutputReportData data)
         digitalWrite(ledPin, HIGH);
     }
     Serial.println("Output event. Weak motor: " + String(data.motor_left) + " Strong motor: " + String(data.motor_right));
-
 }
+
 void setup()
 {
     Serial.begin(115200);
@@ -90,9 +111,7 @@ void setup()
     // Set up dualsense
     dualsense = new DualsenseGamepadDevice(config);
 
-    // Set up event handlers
-    FunctionSlot<DualsenseGamepadOutputReportData> vibrationSlot(OnVibrateEvent);
-    FunctionSlot<DualsenseGamepadOutputReportData> ledSlot(OnLEDEvent);
+    // Attach event handlers (FunctionSlots are defined globally)
     dualsense->onReceivedOutputReport.attach(vibrationSlot);
     dualsense->onReceivedOutputReport.attach(ledSlot);
 

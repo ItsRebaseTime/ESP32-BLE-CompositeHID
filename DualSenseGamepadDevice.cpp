@@ -24,19 +24,10 @@ DualsenseGamepadCallbacks::DualsenseGamepadCallbacks(DualsenseGamepadDevice* dev
 
 void DualsenseGamepadCallbacks::onWrite(NimBLECharacteristic* pCharacteristic, NimBLEConnInfo& connInfo)
 {
-
     std::string raw = pCharacteristic->getValue();
 
     DualsenseGamepadOutputReportData OutputData;
-    /*
-            for (size_t i = 0; i < raw.length(); i++) {
-                Serial.printf(" %d : %02X ", i, (uint8_t)raw[i]);
-                if (i % 16 == 0) {
-                    Serial.println();
-                }
-            }
-            Serial.println();
-    */
+
     if (!OutputData.load((const uint8_t*)raw.data(), raw.length())) {
         ESP_LOGD(LOG_TAG, "Invalid DS output report size: %d", (int)raw.length());
         return;
