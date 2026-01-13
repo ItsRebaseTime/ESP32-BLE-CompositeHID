@@ -84,8 +84,8 @@ static const uint8_t DualsenseEdge_FirmwareInfo[] {
     0x00,
     0x00,
     0x00,
-    0x54,
-    0x01,
+    0x24, // Version low byte (2.36 = 0x0224) - must be >= 2.21 for vibration v2
+    0x02, // Version high byte
     0x00,
     0x00,
     0x14,
