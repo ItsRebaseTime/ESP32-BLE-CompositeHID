@@ -95,8 +95,9 @@ private:
 struct DualsenseGamepadOutputReportData {
     uint8_t type;
     uint8_t seq_tag = 0;
-    uint8_t tag = 0;
     uint8_t motor_right = 0, motor_left = 0;
+    uint8_t tag = 0;
+
 
     uint8_t headphone_volume = 0, speaker_volume = 0, mic_volume = 0;
     uint8_t audio_control = 0;
