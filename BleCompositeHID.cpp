@@ -186,6 +186,7 @@ void BleCompositeHID::taskServer(void *pvParameter)
     pServer->setCallbacks(BleCompositeHIDInstance->_connectionStatus);
     pServer->advertiseOnDisconnect(true);
     BleCompositeHIDInstance->_hid = new NimBLEHIDDevice(pServer);
+    BleCompositeHIDInstance->_connectionStatus->setConfiguration(&BleCompositeHIDInstance->_configuration);
     
     // Setup the HID descriptor buffers
     size_t totalBufferSize = 2048;
@@ -280,6 +281,7 @@ void BleCompositeHID::taskServer(void *pvParameter)
     // Start BLE advertisement
     NimBLEAdvertising *pAdvertising = pServer->getAdvertising();
     pAdvertising->setAppearance(hidType);
+    pAdvertising->setName(BleCompositeHIDInstance->deviceName);
     pAdvertising->addServiceUUID(BleCompositeHIDInstance->_hid->getHidService()->getUUID());
     pAdvertising->start();
     ESP_LOGD(LOG_TAG, "Advertising started!");
