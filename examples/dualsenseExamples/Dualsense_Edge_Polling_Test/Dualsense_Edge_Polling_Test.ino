@@ -10,7 +10,7 @@ uint8_t playerLEDs = 0x00;
 uint8_t ledcolor[3] = {0,0,0}; 
 uint8_t muteled = 0;
 DualsenseGamepadDevice* dualsense;
-BleCompositeHID compositeHID("Libreesteishon Edge", "YeaSeb", 100);
+BleCompositeHID compositeHID("Libresteishon Edge", "YeaSeb", 100);
 void onLEDsetup(DualsenseGamepadOutputReportData data)
 {
     if (data.player_leds != playerLEDs) {
