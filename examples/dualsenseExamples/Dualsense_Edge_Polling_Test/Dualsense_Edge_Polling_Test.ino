@@ -92,7 +92,7 @@ void setup()
     dualsense = new DualsenseGamepadDevice(config);
     // Set up vibration event handler
     FunctionSlot<DualsenseGamepadOutputReportData> vibrationSlot(OnVibrateEvent);
-    dualsense->onVibrate.attach(vibrationSlot);
+    dualsense->onReceivedOutputReport.attach(vibrationSlot);
 
     // Add all child devices to the top-level composite HID device to manage them
     compositeHID.addDevice(dualsense);
