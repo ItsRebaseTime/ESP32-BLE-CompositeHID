@@ -105,8 +105,8 @@ struct DualsenseGamepadOutputReportData {
     // Common section starts at byte 3 (47 bytes)
     uint8_t valid_flag0 = 0;        // Byte 3
     uint8_t valid_flag1 = 0;        // Byte 4
-    uint8_t motor_right = 0;        // Byte 5: Strong motor (was incorrectly at byte 3)
-    uint8_t motor_left = 0;         // Byte 6: Weak motor (was incorrectly at byte 4)
+    uint8_t motor_right = 0;        // Byte 5: Strong motor
+    uint8_t motor_left = 0;         // Byte 6: Weak motor
 
     uint8_t headphone_volume = 0;   // Byte 7
     uint8_t speaker_volume = 0;     // Byte 8
