@@ -16,7 +16,7 @@ public:
 
 class DualsenseEdgeControllerDeviceConfiguration : public DualsenseGamepadDeviceConfiguration {
 public:
-    virtual const char* getDeviceName() const { return "MusulsenseEdge"; }
+    virtual const char* getDeviceName() const { return "DualSense Edge"; }
     virtual BLEHostConfiguration getIdealHostConfiguration() const override;
     virtual uint8_t getDeviceReportSize() const override;
     virtual size_t makeDeviceReport(uint8_t* buffer, size_t bufferSize) const override;

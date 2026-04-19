@@ -92,111 +92,215 @@ public:
 private:
     DualsenseGamepadDevice* _device;
 };
+
+// DualSense BT Output Report structure (78 bytes total)
+// Based on Linux hid-playstation.c dualsense_output_report_bt struct
+#pragma pack(push, 1)
 struct DualsenseGamepadOutputReportData {
-    uint8_t type;
-    uint8_t seq_tag = 0;
-    uint8_t motor_right = 0, motor_left = 0;
-    uint8_t tag = 0;
+    // BT Header (3 bytes)
+    uint8_t report_id = 0;          // Byte 0: Should be 0x31
+    uint8_t seq_tag = 0;            // Byte 1: Sequence tag (upper 4 bits = seq, lower 4 = tag)
+    uint8_t tag = 0;                // Byte 2: Should be 0x10 (DS_OUTPUT_TAG)
 
+    // Common section starts at byte 3 (47 bytes)
+    uint8_t valid_flag0 = 0;        // Byte 3
+    uint8_t valid_flag1 = 0;        // Byte 4
+    uint8_t motor_right = 0;        // Byte 5: Strong motor (was incorrectly at byte 3)
+    uint8_t motor_left = 0;         // Byte 6: Weak motor (was incorrectly at byte 4)
 
-    uint8_t headphone_volume = 0, speaker_volume = 0, mic_volume = 0;
-    uint8_t audio_control = 0;
-    uint8_t mute_button_led = 0;
+    uint8_t headphone_volume = 0;   // Byte 7
+    uint8_t speaker_volume = 0;     // Byte 8
+    uint8_t mic_volume = 0;         // Byte 9
+    uint8_t audio_control = 0;      // Byte 10
+    uint8_t mute_button_led = 0;    // Byte 11
 
-    uint8_t valid_flag0 = 0, valid_flag1 = 0;
-    uint8_t power_save_control = 0;
-    uint8_t reserved0[27] = { 0 };
-    uint8_t audio_control2 = 0;
+    uint8_t power_save_control = 0; // Byte 12
+    uint8_t reserved2[27] = { 0 };  // Bytes 13-39
+    uint8_t audio_control2 = 0;     // Byte 40
 
-    uint8_t reserved1[2] = { 0 };
-    uint8_t valid_flag2 = 0;
-    uint8_t lightbar_setup = 0;
-    uint8_t player_leds = 0;
-    uint8_t lightbar_red = 0;
-    uint8_t lightbar_green = 0;
-    uint8_t lightbar_blue = 0;
+    uint8_t valid_flag2 = 0;        // Byte 41
+    uint8_t reserved3[2] = { 0 };   // Bytes 42-43
 
-    uint8_t reserved2[24] = { 0 };
-    uint32_t crc32 = 0;
+    uint8_t lightbar_setup = 0;     // Byte 44
+    uint8_t led_brightness = 0;     // Byte 45
+    uint8_t player_leds = 0;        // Byte 46
+    uint8_t lightbar_red = 0;       // Byte 47
+    uint8_t lightbar_green = 0;     // Byte 48
+    uint8_t lightbar_blue = 0;      // Byte 49
+
+    uint8_t reserved4[24] = { 0 };  // Bytes 50-73
+    uint32_t crc32 = 0;             // Bytes 74-77
 
     // default constructor OK
     DualsenseGamepadOutputReportData() = default;
 
-    // parsing function
+    // parsing function - reads from raw BLE output report bytes
+    // Handles multiple formats:
+    // - 78 bytes: Full BLE report (report_id=0x31 + seq_tag + tag + common)
+    // - 77 bytes: USB-over-BLE (seq + common) - DSX sends this format
+    //            OR BLE report with report_id stripped (seq_tag + tag + common)
+    // - 63 bytes: USB report (report_id=0x02 + common)
+    // - 62 bytes: USB report with report_id stripped (common only)
+    //
+    // DSX 77-byte format: [seq 0x00-0x0F] [valid_flag0] [valid_flag1] [motor_r] [motor_l] ...
     bool load(const uint8_t* value, size_t size)
     {
-        if (!value || size < 77)
+        if (!value || size < 47)  // Minimum: common section is 47 bytes
             return false;
-        type = value[0];
-        seq_tag = value[1];
-        tag = value[2];
-        motor_right = value[3];
-        motor_left = value[4];
 
-        headphone_volume = value[5];
-        speaker_volume = value[6];
-        mic_volume = value[7];
-        audio_control = value[8];
-        mute_button_led = value[9];
-        valid_flag0 = value[10];
-        valid_flag1 = value[11];
-        power_save_control = value[12];
-        audio_control2 = value[39];
+        int common_offset = 0;  // Offset to start of common section
 
-        valid_flag2 = value[42];
-        lightbar_setup = value[43];
-        player_leds = value[44];
-        lightbar_red = value[45];
-        lightbar_green = value[46];
-        lightbar_blue = value[47];
+        if (size >= 77) {
+            // 77-78 byte reports - could be BLE or USB-over-BLE format
+            if (size >= 78 && value[0] == 0x31) {
+                // Full BLE report with report_id 0x31
+                report_id = value[0];
+                seq_tag = value[1];
+                tag = value[2];
+                common_offset = 3;
+            } else if (value[0] == 0x31) {
+                // 77-byte BLE report (report_id present but one byte short)
+                report_id = value[0];
+                seq_tag = value[1];
+                tag = value[2];
+                common_offset = 3;
+            } else if (value[1] == 0x10) {
+                // BLE report with report_id stripped, tag=0x10 at byte 1
+                report_id = 0x31;  // Implied
+                seq_tag = value[0];
+                tag = value[1];
+                common_offset = 2;
+            } else if (value[0] <= 0x0F) {
+                // USB-over-BLE format: first byte is seq counter (0x00-0x0F)
+                // Common section starts at byte 1
+                // Format: [seq] [valid_flag0] [valid_flag1] [motor_r] [motor_l] ...
+                report_id = 0x02;  // USB format
+                seq_tag = value[0];
+                tag = 0;
+                common_offset = 1;
+            } else {
+                // Unknown format - try assuming common starts at byte 1
+                // This handles DSX sending USB-style reports over BLE
+                report_id = 0x02;
+                seq_tag = value[0];
+                tag = 0;
+                common_offset = 1;
+            }
+        } else if (size >= 62) {
+            // USB format (62-63 bytes)
+            if (size >= 63 && value[0] == 0x02) {
+                // Full USB report with report_id
+                report_id = value[0];
+                seq_tag = 0;
+                tag = 0;
+                common_offset = 1;
+            } else {
+                // USB report with report_id stripped
+                report_id = 0x02;
+                seq_tag = 0;
+                tag = 0;
+                common_offset = 0;
+            }
+        } else {
+            // Too small - try parsing as common section directly
+            report_id = 0;
+            seq_tag = 0;
+            tag = 0;
+            common_offset = 0;
+        }
 
-        crc32 = (uint32_t)value[73]
-            | ((uint32_t)value[74] << 8)
-            | ((uint32_t)value[75] << 16)
-            | ((uint32_t)value[76] << 24);
+        // Parse common section (47 bytes)
+        // Common structure: valid_flag0, valid_flag1, motor_right, motor_left, ...
+        valid_flag0 = value[common_offset + 0];
+        valid_flag1 = value[common_offset + 1];
+        motor_right = value[common_offset + 2];
+        motor_left = value[common_offset + 3];
+
+        headphone_volume = value[common_offset + 4];
+        speaker_volume = value[common_offset + 5];
+        mic_volume = value[common_offset + 6];
+        audio_control = value[common_offset + 7];
+        mute_button_led = value[common_offset + 8];
+        power_save_control = value[common_offset + 9];
+        // reserved2[27] at common+10 through common+36
+        audio_control2 = value[common_offset + 37];
+
+        valid_flag2 = value[common_offset + 38];
+        // reserved3[2] at common+39, common+40
+        lightbar_setup = value[common_offset + 41];
+        led_brightness = value[common_offset + 42];
+        player_leds = value[common_offset + 43];
+        lightbar_red = value[common_offset + 44];
+        lightbar_green = value[common_offset + 45];
+        lightbar_blue = value[common_offset + 46];
+
+        // CRC is at the end of the report (if present)
+        if (size >= common_offset + 47 + 4) {
+            size_t crc_offset = size - 4;
+            crc32 = (uint32_t)value[crc_offset]
+                | ((uint32_t)value[crc_offset + 1] << 8)
+                | ((uint32_t)value[crc_offset + 2] << 16)
+                | ((uint32_t)value[crc_offset + 3] << 24);
+        } else {
+            crc32 = 0;
+        }
 
         return true;
     }
-} __attribute__((packed));
+}__attribute__((packed));
+#pragma pack(pop)
 
-static_assert(sizeof(DualsenseGamepadOutputReportData) == 77, "Wrong size");
+static_assert(sizeof(DualsenseGamepadOutputReportData) == DS_OUTPUT_REPORT_BT_SIZE, "Wrong size - expected 78 bytes");
 
+// DualSense BLE Input Report structure (77 bytes, sent after report ID 0x31 prepended by HID layer)
+// Byte layout matches `struct dualsense_input_report` in Linux hid-playstation.c
+// with a leading BT header byte (bit 0 = HasHID, must be 1; bits 4-7 = seq).
 #pragma pack(push, 1)
 struct DualsenseGamepadInputReportData {
-    uint8_t bt = 0x10; // -1
-    uint8_t x = 0x80; // 0 Left joystick X
-    uint8_t y = 0x80; // 1 Left joystick Y
-    uint8_t z = 0x80; // 2 Right jostick X
-    uint8_t rz = 0x80; // 3 Right joystick Y
-    uint8_t brake = 0; // 4 8 bits for brake (left trigger)
-    uint8_t accelerator = 0; // 5 8 bits for accelerator (right trigger)
-    uint8_t seq = 0x20; // 6
-    uint8_t hat : 4; // 6.5 4bits for hat switch (Dpad) + 0 bit padding (0.5 byte)
-    uint32_t buttons : 20; // 9 20 * 1bit for buttons + 8 bit padding (4 bytes)
-    uint8_t extra_buttons; // 10
-    uint32_t reserved; // 14
-    uint16_t gyro_x = 0; // 16
-    uint16_t gyro_y = 0; // 18
-    uint16_t gyro_z = 0; // 20
-    uint16_t accel_x = 0; // 22
-    uint16_t accel_y = 0; // 24
-    uint16_t accel_z = 0; // 26
-    uint32_t timestamp = 0x7621DD40; // 30
-    uint8_t reserved2 = 0; // 31
-    uint8_t touchpoint_l_contact = 0;
-    uint16_t touchpoint_l_x : 12; // 32 - 34
-    uint16_t touchpoint_l_y : 12; // 34.5 - 35
-    uint8_t touchpoint_r_contact = 0; // 36
-    uint16_t touchpoint_r_x : 12; // 32 - 34
-    uint16_t touchpoint_r_y : 12; // 34.5 - 35
-    uint8_t data_41_53[12];
-    uint8_t battery = 0xFF;
-    uint8_t data_54_74[18];
-    uint8_t reserved3 = 0x00;
+    uint8_t bt = 0x01;              // byte  0: BLE header (HasHID=1)
+    uint8_t x  = 0x80;              // byte  1: left stick X  (ABS_X,  0x80 = centered)
+    uint8_t y  = 0x80;              // byte  2: left stick Y  (ABS_Y)
+    uint8_t rx = 0x80;              // byte  3: right stick X (ABS_RX, 0x80 = centered)
+    uint8_t ry = 0x80;              // byte  4: right stick Y (ABS_RY)
+    uint8_t z  = 0;                 // byte  5: L2 analog trigger (ABS_Z)
+    uint8_t rz = 0;                 // byte  6: R2 analog trigger (ABS_RZ)
+    uint8_t seq = 0x20;             // byte  7: sequence number
+    // bytes 8-10: hat (low nibble of byte 8) + 20 buttons spread across the high nibble of
+    // byte 8 and all of bytes 9-10. `uint8_t buttons[3]` makes the byte layout deterministic
+    // across toolchains (mixing uint8_t/uint32_t bitfields under __attribute__((packed)) is
+    // compiler-dependent).
+    uint8_t buttons[3] = { 0x08, 0, 0 };  // byte 8 low nibble hat defaults to 0x08 (NONE)
+    uint8_t extra_buttons = 0;      // byte 11: Edge paddles / misc
+    uint32_t reserved = 0;          // bytes 12-15
+    int16_t gyro_x = 0;             // bytes 16-17
+    int16_t gyro_y = 0;             // bytes 18-19
+    int16_t gyro_z = 0;             // bytes 20-21
+    int16_t accel_x = 0;            // bytes 22-23
+    int16_t accel_y = 0;            // bytes 24-25
+    int16_t accel_z = 0;            // bytes 26-27
+    uint32_t timestamp = 0x7621DD40;// bytes 28-31: sensor timestamp
+    uint8_t reserved2 = 0;          // byte 32
+    uint8_t touchpoint_l_contact = 0x80;  // byte 33 (0x80 = no contact)
+    uint16_t touchpoint_l_x : 12;   // bytes 34-35 (low 12 bits across two bytes, packed with y)
+    uint16_t touchpoint_l_y : 12;   // byte 36 (high 12 bits)
+    uint8_t touchpoint_r_contact = 0x80;  // byte 37
+    uint16_t touchpoint_r_x : 12;   // bytes 38-39
+    uint16_t touchpoint_r_y : 12;   // byte 40
+    uint8_t data_41_53[12];         // bytes 41-52
 
-    uint32_t crc32 = 0; // 4-byte CRC32 checksum
+    // byte 53: battery/status[0]. Low nibble = capacity 0-10, high nibble = charging state.
+    // 0x0A = 100% discharging (normal). 0xFF would read as capacity=15 + charging=0xF (error).
+    uint8_t status = 0x0A;          // byte 53
+
+    uint8_t data_54_74[18];         // bytes 54-71
+    uint8_t reserved3 = 0x00;       // byte 72
+    uint32_t crc32 = 0;             // bytes 73-76
 } __attribute__((packed));
+
 #pragma pack(pop)
+
+static_assert(sizeof(DualsenseGamepadInputReportData) == 77, "Input report must be 77 bytes (78 on wire after report ID prepended)");
+
 struct DualsenseGamepadPairingReportdata {
     uint8_t mac_address[6];
     uint8_t common[9];
@@ -263,7 +367,7 @@ public:
     void release(uint32_t button = DUALSENSE_BUTTON_A);
     bool isPressed(uint32_t button = DUALSENSE_BUTTON_A);
     void setLeftThumb(int8_t x = 0, int8_t y = 0);
-    void setRightThumb(int8_t z = 0, int8_t rZ = 0);
+    void setRightThumb(int8_t x = 0, int8_t y = 0);
     void setLeftTrigger(uint8_t rX = 0);
     void setRightTrigger(uint8_t rY = 0);
     void setTriggers(uint8_t rX = 0, uint8_t rY = 0);
@@ -287,6 +391,19 @@ public:
     void timestamp();
     void seq();
 
+    // Called by callback when host reads a feature report - populates value before read completes
+    void populateFeatureReportOnRead(NimBLECharacteristic* pCharacteristic);
+
+    // Characteristic accessors used by DualsenseGamepadCallbacks to identify
+    // which pipe a read/subscribe came from when logging.
+    NimBLECharacteristic* getInputChar()          { return getInput(); }
+    NimBLECharacteristic* getOutputChar()         { return getOutput(); }
+    NimBLECharacteristic* getMinimalInput() const { return _minimalInput; }
+    NimBLECharacteristic* getCalibration() const  { return _calibration; }
+    NimBLECharacteristic* getFirmwareInfo() const { return _firmwareInfo; }
+    NimBLECharacteristic* getPairingInfo() const  { return _pairingInfo; }
+    NimBLECharacteristic* getBtPatchInfo() const  { return _btPatchInfo; }
+
 private:
     void sendGamepadReportImpl();
     void sendFirmInfoReportImpl();
@@ -294,13 +411,16 @@ private:
     void sendPairingInfoReportImpl();
     DualsenseGamepadInputReportData _inputReport;
     DualsenseGamepadPairingReportdata _pairingReport;
-    void signCRC32Inplace(const uint8_t* data, uint8_t seed);
+    void buildFeatureReportWithCrc(uint8_t reportId, const uint8_t* payload,
+        size_t payloadSize, uint8_t* outBuffer, size_t outSize);
     NimBLECharacteristic* _extra_input;
+    NimBLECharacteristic* _minimalInput;  // 0x01 9-byte Generic Desktop input report (BLE GAP requirement)
     DualsenseGamepadCallbacks* _callbacks;
     DualsenseGamepadDeviceConfiguration* _config;
     NimBLECharacteristic* _calibration;
     NimBLECharacteristic* _firmwareInfo;
     NimBLECharacteristic* _pairingInfo;
+    NimBLECharacteristic* _btPatchInfo;
     uint32_t crc32_le(unsigned int crc, unsigned char const* buf, unsigned int len);
     void generate_crc_table(uint32_t* crcTable);
     uint32_t* m_pCrcTable;

@@ -16,6 +16,8 @@
 #define DUALSENSE_EDGE_INPUT_REPORT_ID 0x31
 #define DUALSENSE_EDGE_OUTPUT_REPORT_ID 0x31
 #define DUALSENSE_EDGE_INPUT_REPORT_BT_SIZE 78
+#define DUALSENSE_MINIMAL_INPUT_REPORT_ID 0x01
+#define DUALSENSE_MINIMAL_INPUT_REPORT_SIZE 9  // 4 stick bytes + 1 hat+pad byte + 2 buttons+pad bytes + 2 trigger bytes
 
 #define DS_OUTPUT_REPORT_BT_SIZE 78
 #define PS_INPUT_CRC32_SEED 0xA1
@@ -27,6 +29,8 @@
 #define DUALSENSE_PAIRING_INFO_REPORT_SIZE 20
 #define DUALSENSE_FIRMWARE_INFO_REPORT_ID 0x20
 #define DUALSENSE_FIRMWARE_INFO_REPORT_SIZE 64
+#define DUALSENSE_BT_PATCH_REPORT_ID 0x22
+#define DUALSENSE_BT_PATCH_REPORT_SIZE 63
 
 static const uint8_t DualsenseEdge_PairInfo_common[] {
     0x08,
@@ -151,25 +155,33 @@ static const uint8_t DualsenseEdge_HIDDescriptor[] {
     0x05, 0x01, // Usage Page (Generic Desktop Ctrls)
     0x09, 0x05, // Usage (Game Pad)
     0xA1, 0x01, // Collection (Application)
+
+    // ========== Report ID 0x01 (Input) - 9-byte minimal Generic Desktop gamepad ==========
+    // Matches the real DualSense BT descriptor (nondebug/dualsense) byte-for-byte.
+    // Windows HIDClass requires at least one Generic Desktop Gamepad input report to
+    // fully activate the HID stack and enable input-report notifications; without it
+    // feature reads work but the input pipe stays dormant. Real DualSense keeps this
+    // report alongside the vendor 0x31 blob for the same reason.
+    // Usage order on the wire: X, Y, Z, Rz (sticks) / hat+padding / 14 buttons+padding / Rx, Ry (triggers)
     0x85, 0x01, //   Report ID (1)
-    0x09, 0x30, //   Usage (X)
-    0x09, 0x31, //   Usage (Y)
-    0x09, 0x32, //   Usage (Z)
-    0x09, 0x35, //   Usage (Rz)
+    0x09, 0x30, //   Usage (X)        -- left stick X
+    0x09, 0x31, //   Usage (Y)        -- left stick Y
+    0x09, 0x32, //   Usage (Z)        -- right stick X
+    0x09, 0x35, //   Usage (Rz)       -- right stick Y
     0x15, 0x00, //   Logical Minimum (0)
     0x26, 0xFF, 0x00, //   Logical Maximum (255)
     0x75, 0x08, //   Report Size (8)
     0x95, 0x04, //   Report Count (4)
-    0x81, 0x02, //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
+    0x81, 0x02, //   Input (Data,Var,Abs)
     0x09, 0x39, //   Usage (Hat switch)
     0x15, 0x00, //   Logical Minimum (0)
     0x25, 0x07, //   Logical Maximum (7)
     0x35, 0x00, //   Physical Minimum (0)
     0x46, 0x3B, 0x01, //   Physical Maximum (315)
-    0x65, 0x14, //   Unit (System: English Rotation, Length: Centimeter)
+    0x65, 0x14, //   Unit (English Rotation: Degrees)
     0x75, 0x04, //   Report Size (4)
     0x95, 0x01, //   Report Count (1)
-    0x81, 0x42, //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,Null State)
+    0x81, 0x42, //   Input (Data,Var,Abs,Null State)
     0x65, 0x00, //   Unit (None)
     0x05, 0x09, //   Usage Page (Button)
     0x19, 0x01, //   Usage Minimum (0x01)
@@ -178,18 +190,22 @@ static const uint8_t DualsenseEdge_HIDDescriptor[] {
     0x25, 0x01, //   Logical Maximum (1)
     0x75, 0x01, //   Report Size (1)
     0x95, 0x0E, //   Report Count (14)
-    0x81, 0x02, //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
+    0x81, 0x02, //   Input (Data,Var,Abs)          -- 14 digital buttons
     0x75, 0x06, //   Report Size (6)
     0x95, 0x01, //   Report Count (1)
-    0x81, 0x01, //   Input (Const,Array,Abs,No Wrap,Linear,Preferred State,No Null Position)
+    0x81, 0x01, //   Input (Const)                 -- 6-bit padding to align triggers
     0x05, 0x01, //   Usage Page (Generic Desktop Ctrls)
-    0x09, 0x33, //   Usage (Rx)
-    0x09, 0x34, //   Usage (Ry)
+    0x09, 0x33, //   Usage (Rx)       -- L2 trigger
+    0x09, 0x34, //   Usage (Ry)       -- R2 trigger
     0x15, 0x00, //   Logical Minimum (0)
     0x26, 0xFF, 0x00, //   Logical Maximum (255)
     0x75, 0x08, //   Report Size (8)
     0x95, 0x02, //   Report Count (2)
-    0x81, 0x02, //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
+    0x81, 0x02, //   Input (Data,Var,Abs)
+
+    // ========== Report ID 0x31 (Input + Output) - pure vendor-defined 77-byte blob ==========
+    // Windows / Sony DualSense driver recognises the device by VID/PID and parses
+    // the raw bytes at fixed offsets (matching `struct dualsense_input_report`).
     0x06, 0x00, 0xFF, //   Usage Page (Vendor Defined 0xFF00)
     0x15, 0x00, //   Logical Minimum (0)
     0x26, 0xFF, 0x00, //   Logical Maximum (255)
@@ -197,9 +213,9 @@ static const uint8_t DualsenseEdge_HIDDescriptor[] {
     0x95, 0x4D, //   Report Count (77)
     0x85, 0x31, //   Report ID (49)
     0x09, 0x31, //   Usage (0x31)
-    0x91, 0x02, //   Output (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position,Non-volatile)
+    0x91, 0x02, //   Output (Data,Var,Abs,Non-volatile)
     0x09, 0x3B, //   Usage (0x3B)
-    0x81, 0x02, //   Input (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position)
+    0x81, 0x02, //   Input (Data,Var,Abs)
     0x85, 0x32, //   Report ID (50)
     0x09, 0x32, //   Usage (0x32)
     0x95, 0x8D, //   Report Count (-115)
@@ -356,8 +372,6 @@ static const uint8_t DualsenseEdge_HIDDescriptor[] {
     0x95, 0x07, //   Report Count (7)
     0xB1, 0x02, //   Feature (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position,Non-volatile)
     0xC0 // End Collection
-
-    // 428 bytes
 };
 static_assert(sizeof(DualsenseEdge_HIDDescriptor) == 428, "Wrong size");
 #endif

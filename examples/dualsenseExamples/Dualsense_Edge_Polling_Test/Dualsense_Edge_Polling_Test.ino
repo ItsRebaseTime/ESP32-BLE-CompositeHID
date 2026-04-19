@@ -124,6 +124,7 @@ void loop()
                     //dualsense->setRightThumb(cos(i) * 100, -sin(i) * 100);
                     dualsense->sendGamepadReport();
                     delayMicroseconds(900);
+                    yield();
                 }
                 //dualsense->setRightThumb(0, 0);
                 dualsense->setLeftThumb(0, 0);
