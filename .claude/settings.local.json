@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(xargs grep *)",
-      "Read(//c/Users/Mystfit/.claude/projects/e--Code-ESP32-BLE-CompositeHID/memory//**)",
-      "Read(//c/Users/Mystfit/.claude/plans//**)"
-    ]
-  }
-}
