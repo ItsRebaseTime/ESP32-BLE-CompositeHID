@@ -62,19 +62,30 @@ void DualsenseGamepadCallbacks::onWrite(NimBLECharacteristic* pCharacteristic, N
     const NimBLEAttValue& value = pCharacteristic->getValue();
     size_t len = value.size();
 
-    ESP_LOGD(LOG_TAG, "*** onWrite triggered: handle=%d, size=%d, connHandle=%d ***",
-        handle, len, connInfo.getConnHandle());
-
     if (len == 0) {
-        ESP_LOGW(LOG_TAG, "Empty write received!");
+        ESP_LOGD(LOG_TAG, "*** onWrite triggered: handle=%d, size=0 (empty) connHandle=%d ***",
+            handle, connInfo.getConnHandle());
         return;
     }
 
     const uint8_t* data = value.data();
+    const char* role = "unknown";
+    if (_device) {
+        if (pCharacteristic == _device->getOutputChar())         role = "OUTPUT-0x31";
+        else if (pCharacteristic == _device->getCalibration())   role = "FEATURE-0x05";
+        else if (pCharacteristic == _device->getPairingInfo())   role = "FEATURE-0x09";
+        else if (pCharacteristic == _device->getFirmwareInfo())  role = "FEATURE-0x20";
+        else if (pCharacteristic == _device->getBtPatchInfo())   role = "FEATURE-0x22";
+    }
+    // Log role + first 4 bytes so we can see what Steam is writing without flooding the log
+    ESP_LOGD(LOG_TAG, "*** onWrite triggered: role=%s handle=%d, size=%d, bytes=[%02X %02X %02X %02X ...] connHandle=%d ***",
+        role, handle, len,
+        len > 0 ? data[0] : 0, len > 1 ? data[1] : 0,
+        len > 2 ? data[2] : 0, len > 3 ? data[3] : 0,
+        connInfo.getConnHandle());
 
-    // Accept any size >= 47 (minimum common section size)
     if (len < 47) {
-        ESP_LOGW(LOG_TAG, "Output report too small for DualSense: %d bytes", len);
+        ESP_LOGW(LOG_TAG, "Output report too small for DualSense: %d bytes (may be feature/LED-only write)", len);
     }
 
     DualsenseGamepadOutputReportData outputData;
@@ -90,7 +101,7 @@ void DualsenseGamepadCallbacks::onRead(NimBLECharacteristic* pCharacteristic, Ni
     // The characteristic handle can help identify which report is being read
     uint16_t handle = pCharacteristic->getHandle();
 
-    ESP_LOGI(LOG_TAG, "*** onRead triggered: handle=%d, connHandle=%d ***", handle, connInfo.getConnHandle());
+    ESP_LOGD(LOG_TAG, "*** onRead triggered: handle=%d, connHandle=%d ***", handle, connInfo.getConnHandle());
 
     // Populate feature reports on read so Steam gets valid data
     // This is called BEFORE the data is sent to the host

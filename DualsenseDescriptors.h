@@ -12,7 +12,7 @@
 
 #define DUALSENSE_EDGE_PRODUCT_ID 0x0DF2
 #define DUALSENSE_EDGE_BCD_DEVICE_ID 0x0408
-#define DUALSENSE_EDGE_SERIAL "0"
+#define DUALSENSE_EDGE_SERIAL "G45700GWN10872283"
 #define DUALSENSE_EDGE_INPUT_REPORT_ID 0x31
 #define DUALSENSE_EDGE_OUTPUT_REPORT_ID 0x31
 #define DUALSENSE_EDGE_INPUT_REPORT_BT_SIZE 78
@@ -24,11 +24,15 @@
 #define PS_OUTPUT_CRC32_SEED 0xA2
 #define PS_FEATURE_CRC32_SEED 0xA3
 #define DUALSENSE_CALIBRATION_REPORT_ID 0x05
-#define DUALSENSE_CALIBRATION_REPORT_SIZE 41
+// Sizes match the HID descriptor's Report Count for each feature report.
+// The BLE characteristic value contains payload only (no leading report ID byte);
+// Linux hid-playstation's DS_FEATURE_REPORT_*_SIZE constants include the report ID,
+// so they are one byte larger than the sizes here.
+#define DUALSENSE_CALIBRATION_REPORT_SIZE 40
 #define DUALSENSE_PAIRING_INFO_REPORT_ID 0x09
-#define DUALSENSE_PAIRING_INFO_REPORT_SIZE 20
+#define DUALSENSE_PAIRING_INFO_REPORT_SIZE 19
 #define DUALSENSE_FIRMWARE_INFO_REPORT_ID 0x20
-#define DUALSENSE_FIRMWARE_INFO_REPORT_SIZE 64
+#define DUALSENSE_FIRMWARE_INFO_REPORT_SIZE 63
 #define DUALSENSE_BT_PATCH_REPORT_ID 0x22
 #define DUALSENSE_BT_PATCH_REPORT_SIZE 63
 
@@ -374,4 +378,10 @@ static const uint8_t DualsenseEdge_HIDDescriptor[] {
     0xC0 // End Collection
 };
 static_assert(sizeof(DualsenseEdge_HIDDescriptor) == 428, "Wrong size");
+static_assert(sizeof(DualsenseEdge_StockCalibration) == DUALSENSE_CALIBRATION_REPORT_SIZE,
+    "DualsenseEdge_StockCalibration must match DUALSENSE_CALIBRATION_REPORT_SIZE and the HID descriptor's Report Count for 0x05");
+static_assert(sizeof(DualsenseEdge_FirmwareInfo) == DUALSENSE_FIRMWARE_INFO_REPORT_SIZE,
+    "DualsenseEdge_FirmwareInfo must match DUALSENSE_FIRMWARE_INFO_REPORT_SIZE and the HID descriptor's Report Count for 0x20");
+static_assert(sizeof(DualsenseEdge_PairInfo_common) == 9,
+    "DualsenseEdge_PairInfo_common must be 9 bytes (fills the 9-byte `common` field in DualsenseGamepadPairingReportdata)");
 #endif

@@ -3,16 +3,20 @@
  *
  * This example emulates a Sony DualSense Edge controller over BLE.
  *
- * IMPORTANT NOTE ON HAPTICS/VIBRATION:
- * Real DualSense controllers do NOT support haptic feedback over Bluetooth on Windows/PC.
- * Sony's haptic system is audio-based and requires a USB connection to expose the controller
- * as an audio device. Over Bluetooth, only basic rumble and adaptive triggers are supported
- * (and support varies by application). This is a hardware/protocol limitation of the
- * DualSense design, not a limitation of this library.
+ * RUMBLE NOTE (Steam on Windows):
+ * On a fresh connection, Steam will NOT send rumble output reports until you open
+ *   Steam → Controller Settings → (select the controller) → Calibration and advanced settings
+ *   → Gyro Calibration
+ * once. After that Steam's "Game Rumble" toggle auto-enables and rumble works for the rest
+ * of the session. This appears to be a Steam-client-side state machine that only unlocks
+ * haptics after the gyro-calibration UI has been viewed; it is not a limitation of this
+ * firmware. Tested workarounds that did NOT help: matching feature-report sizes to the HID
+ * descriptor, proactively indicating calibration on input subscribe, forcing GATT Service
+ * Changed to re-read calibration, and spoofing a Sony Bluetooth OUI.
  *
- * The onReceivedOutputReport callback will still fire for any output reports that ARE sent
- * (such as LED color changes), but don't expect haptic/vibration commands from applications
- * like Steam when connected over Bluetooth.
+ * Advanced haptic features (audio-based vibration, adaptive triggers) still require a USB
+ * connection — over Bluetooth only basic dual-motor rumble is supported, matching the real
+ * DualSense.
  */
 
 #include <BleConnectionStatus.h>
@@ -153,6 +157,7 @@ void loop()
         const float STEP = 0.05; // angle change per frame (speed)
 
         dualsense->timestamp();
+        dualsense->seq();
 
         if(Serial.available() < 2) {
             dualsense->sendGamepadReport();

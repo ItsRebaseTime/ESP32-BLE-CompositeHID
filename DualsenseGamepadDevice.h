@@ -307,6 +307,9 @@ struct DualsenseGamepadPairingReportdata {
     uint32_t crc32;
 } __attribute__((packed));
 
+static_assert(sizeof(DualsenseGamepadPairingReportdata) == DUALSENSE_PAIRING_INFO_REPORT_SIZE,
+    "DualsenseGamepadPairingReportdata must match DUALSENSE_PAIRING_INFO_REPORT_SIZE and the HID descriptor's Report Count for 0x09");
+
 static uint8_t dPadDirectionToValue(DualsenseDpadFlags direction)
 {
     if (direction == DualsenseDpadFlags::NORTH)
