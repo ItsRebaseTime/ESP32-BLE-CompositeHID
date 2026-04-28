@@ -17,6 +17,14 @@
  * Advanced haptic features (audio-based vibration, adaptive triggers) still require a USB
  * connection — over Bluetooth only basic dual-motor rumble is supported, matching the real
  * DualSense.
+ *
+ * BLE-REACHABLE HAPTIC PROXY:
+ * True VCA haptic audio (what DSX calls "BT Haptics" / "Sound Waves") is streamed over the
+ * Bluetooth Classic HID interrupt channel via an undocumented Sony firmware path. It does
+ * not reach BLE HoGP peripherals. If you want a host-driven haptic signal that DOES survive
+ * BLE, the adaptive-trigger "Vibration" effect (DS_TRIGGER_EFFECT_VIBRATION, type 0x26)
+ * travels inside the standard 0x31 output report and carries frequency + amplitude. You can
+ * drive an external LRA/VCA amplifier from those values — see OnVibrateEvent below.
  */
 
 #include <BleConnectionStatus.h>
@@ -90,18 +98,133 @@ void OnLEDEvent(DualsenseGamepadOutputReportData data)
     }
 }
 
+String formatTriggerEffect(const DualsenseGamepadOutputReportData::ParsedTriggerEffect& t)
+{
+    String s;
+    switch (t.subtype()) {
+        case DS_TRIGGER_SUBTYPE_OFF:
+            s = "off";
+            break;
+
+        case DS_TRIGGER_SUBTYPE_FEEDBACK: {
+            auto fb = t.asFeedback();
+            s = "feedback(start=" + String(fb.start_position)
+              + ",strength=" + String(fb.strength())
+              + ",mask=0x" + String(fb.position_mask, HEX) + ")";
+            break;
+        }
+
+        case DS_TRIGGER_SUBTYPE_SLOPE_FEEDBACK: {
+            auto sl = t.asSlope();
+            s = "slope(start=" + String(sl.start_position)
+              + ",end=" + String(sl.end_position)
+              + ",startStr=" + String(sl.start_strength)
+              + ",endStr=" + String(sl.end_strength)
+              + ",mask=0x" + String(sl.position_mask, HEX) + ")";
+            break;
+        }
+
+        case DS_TRIGGER_SUBTYPE_MULTIPLE_POSITION_FEEDBACK: {
+            auto mp = t.asMultiPosition();
+            s = "multipos(mask=0x" + String(mp.position_mask, HEX) + ",strengths=[";
+            for (int i = 0; i < 10; i++) {
+                if (i) s += ",";
+                s += String(mp.per_position_strength[i]);
+            }
+            s += "])";
+            break;
+        }
+
+        case DS_TRIGGER_SUBTYPE_WEAPON: {
+            auto w = t.asWeapon();
+            s = "weapon(start=" + String(w.start_position)
+              + ",end=" + String(w.end_position)
+              + ",strength=" + String(w.strength)
+              + ",mask=0x" + String(w.position_mask, HEX) + ")";
+            break;
+        }
+
+        case DS_TRIGGER_SUBTYPE_VIBRATION: {
+            auto v = t.asVibration();
+            s = "vibration(start=" + String(v.start_position)
+              + ",amp=" + String(v.amplitude())
+              + ",freq=" + String(v.frequency) + "Hz"
+              + ",mask=0x" + String(v.position_mask, HEX) + ")";
+            break;
+        }
+
+        case DS_TRIGGER_SUBTYPE_MULTIPLE_POSITION_VIBRATION: {
+            auto mv = t.asMultiVibration();
+            s = "multivib(freq=" + String(mv.frequency) + "Hz,amps=[";
+            for (int i = 0; i < 10; i++) {
+                if (i) s += ",";
+                s += String(mv.per_position_amplitude[i]);
+            }
+            s += "])";
+            break;
+        }
+
+        default:
+            s = "unknown(0x" + String(t.mode, HEX) + ",params=[";
+            for (int i = 0; i < 10; i++) {
+                if (i) s += ",";
+                s += String(t.raw_params[i]);
+            }
+            s += "])";
+            break;
+    }
+    return s;
+}
+
 void OnVibrateEvent(DualsenseGamepadOutputReportData data)
 {
-    if(data.motor_left != motor_left || data.motor_right != motor_right){
-        motor_left = data.motor_left;
-        motor_right = data.motor_right;
+    String message = "";
 
-        if (motor_left > 0 || motor_right > 0) {
-            digitalWrite(ledPin, HIGH);
-        } else {
-            digitalWrite(ledPin, LOW);
+    // Classic rumble. weakMotor()/strongMotor() are aliases for
+    // motor_left/motor_right that name the canonical wire roles.
+    if (data.hasRumble()) {
+        if(data.weakMotor() != motor_left){
+            motor_left = data.weakMotor();
+            message += "rumble_weak_motor:" + String(motor_left);
         }
-        Serial.println("Output event. Weak motor: " + String(data.motor_left) + " Strong motor: " + String(data.motor_right));
+        if(data.strongMotor() != motor_right){
+            motor_right = data.strongMotor();
+            if(!message.isEmpty()) message += ",";
+            message += "rumble_strong_motor:" + String(motor_right);
+        }
+    }
+
+    // Log all adaptive-trigger effects whenever the host sets the effect flags.
+    auto lt = data.leftTrigger();
+    auto rt = data.rightTrigger();
+    if (data.hasLeftTriggerEffect()) {
+        if(!message.isEmpty()) message += ",";
+        message += "L2=" + formatTriggerEffect(lt);
+    }
+    if (data.hasRightTriggerEffect()) {
+        if(!message.isEmpty()) message += ",";
+        message += " R2=" + formatTriggerEffect(rt);
+    }
+
+    // Raw byte dump for active trigger effects — helps verify decoded values.
+    // Shows mode + p[0..9]; for Vibration: freq is at p[9] (single) or p[8] (multi).
+    if (data.hasLeftTriggerEffect()) {
+        String d = " L2 raw: " + String(lt.mode);
+        for (int i = 0; i < 10; ++i) d += "," + String(lt.raw_params[i]);
+        message += d;
+    }
+    if (data.hasRightTriggerEffect()) {
+        String d = " R2 raw: " + String(rt.mode);
+        for (int i = 0; i < 10; ++i) d += "," + String(rt.raw_params[i]);
+        message += d;
+    }
+
+    if(!message.isEmpty()) Serial.println(message);
+
+    if (motor_left > 0 || motor_right > 0) {
+        digitalWrite(ledPin, HIGH);
+    } else {
+        digitalWrite(ledPin, LOW);
     }
 }
 

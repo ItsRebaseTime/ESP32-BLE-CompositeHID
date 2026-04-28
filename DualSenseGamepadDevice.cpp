@@ -77,12 +77,12 @@ void DualsenseGamepadCallbacks::onWrite(NimBLECharacteristic* pCharacteristic, N
         else if (pCharacteristic == _device->getFirmwareInfo())  role = "FEATURE-0x20";
         else if (pCharacteristic == _device->getBtPatchInfo())   role = "FEATURE-0x22";
     }
-    // Log role + first 4 bytes so we can see what Steam is writing without flooding the log
-    ESP_LOGD(LOG_TAG, "*** onWrite triggered: role=%s handle=%d, size=%d, bytes=[%02X %02X %02X %02X ...] connHandle=%d ***",
-        role, handle, len,
-        len > 0 ? data[0] : 0, len > 1 ? data[1] : 0,
-        len > 2 ? data[2] : 0, len > 3 ? data[3] : 0,
-        connInfo.getConnHandle());
+    // Full hex dump so we can see exactly what the host is writing - critical
+    // for confirming whether tools like DSX are sending output reports at all,
+    // and for inspecting reserved regions we don't parse into named fields.
+    ESP_LOGD(LOG_TAG, "*** onWrite: role=%s handle=%d size=%d connHandle=%d ***",
+        role, handle, len, connInfo.getConnHandle());
+    ESP_LOG_BUFFER_HEX_LEVEL(LOG_TAG, data, len, ESP_LOG_DEBUG);
 
     if (len < 47) {
         ESP_LOGW(LOG_TAG, "Output report too small for DualSense: %d bytes (may be feature/LED-only write)", len);
@@ -756,7 +756,7 @@ void DualsenseGamepadDevice::populateFeatureReportOnRead(NimBLECharacteristic* p
     // This ensures Steam/host gets valid data when it reads feature reports
 
     // Debug: log the handles to help identify which characteristic is which
-    ESP_LOGI(LOG_TAG, "populateFeatureReportOnRead: pChar=%p, _output=%p, _calibration=%p, _firmwareInfo=%p, _pairingInfo=%p, _btPatchInfo=%p",
+    ESP_LOGD(LOG_TAG, "populateFeatureReportOnRead: pChar=%p, _output=%p, _calibration=%p, _firmwareInfo=%p, _pairingInfo=%p, _btPatchInfo=%p",
         (void*)pCharacteristic, (void*)getOutput(), (void*)_calibration, (void*)_firmwareInfo, (void*)_pairingInfo, (void*)_btPatchInfo);
 
     if (pCharacteristic == getOutput()) {
@@ -771,7 +771,7 @@ void DualsenseGamepadDevice::populateFeatureReportOnRead(NimBLECharacteristic* p
         pCharacteristic->setValue(defaultOutputReport, DS_OUTPUT_REPORT_BT_SIZE);
     }
     else if (pCharacteristic == _calibration) {
-        ESP_LOGI(LOG_TAG, "Host reading calibration report (0x05) - populating data and sending input report");
+        ESP_LOGD(LOG_TAG, "Host reading calibration report (0x05) - populating data and sending input report");
         {
             std::lock_guard<std::mutex> lock(_mutex);
             uint8_t buf[DUALSENSE_CALIBRATION_REPORT_SIZE];

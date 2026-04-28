@@ -77,6 +77,62 @@ enum DualsenseDpadFlags : uint8_t {
 #define DUALSENSE_PLAYERLED_4 0x08
 #define DUALSENSE_PLAYERLED_5 0x10
 
+// Output-report valid-flag bits (bit masks for valid_flag0 / valid_flag1 / valid_flag2).
+// The host sets a bit to indicate that the corresponding field in the output report
+// should be applied; unset bits mean "ignore this field". Mirrors Linux hid-playstation.c.
+#define DS_OUT_FLAG0_COMPATIBLE_VIBRATION    (1 << 0)
+#define DS_OUT_FLAG0_HAPTICS_SELECT          (1 << 1)
+#define DS_OUT_FLAG0_RIGHT_TRIGGER_EFFECT    (1 << 2)
+#define DS_OUT_FLAG0_LEFT_TRIGGER_EFFECT     (1 << 3)
+#define DS_OUT_FLAG0_HEADPHONE_VOLUME        (1 << 4)
+#define DS_OUT_FLAG0_SPEAKER_VOLUME          (1 << 5)
+#define DS_OUT_FLAG0_MIC_VOLUME              (1 << 6)
+#define DS_OUT_FLAG0_AUDIO_CONTROL           (1 << 7)
+
+#define DS_OUT_FLAG1_MIC_MUTE_LED            (1 << 0)
+#define DS_OUT_FLAG1_POWER_SAVE_CONTROL      (1 << 1)
+#define DS_OUT_FLAG1_LIGHTBAR                (1 << 2)
+#define DS_OUT_FLAG1_RELEASE_LEDS            (1 << 3)
+#define DS_OUT_FLAG1_PLAYER_INDICATOR        (1 << 4)
+#define DS_OUT_FLAG1_AUDIO_CONTROL2          (1 << 7)
+
+#define DS_OUT_FLAG2_LIGHTBAR_SETUP          (1 << 1)
+#define DS_OUT_FLAG2_COMPATIBLE_VIBRATION2   (1 << 2)
+
+// Adaptive-trigger motor effect modes (value of right/left_trigger_motor_mode).
+// Empirically confirmed from DSX captures. Vibration is the BLE-reachable
+// haptic proxy: params carry frequency + amplitude. Feedback also encodes
+// Slope and Multi-Position depending on the bitmask pattern in raw_params[0..1]:
+//   Feedback / Slope  : contiguous bits from start_position to bit 9
+//   Multiple Position : any arbitrary combination of bits
+enum class DsTriggerMode : uint8_t {
+    Off       = 0x05,
+    Feedback  = 0x21,  // also encodes Slope and Multi-Position
+    Weapon    = 0x25,
+    Vibration = 0x26,
+};
+
+// Deprecated: prefer DsTriggerMode. Will be removed in a future release.
+#define DS_TRIGGER_EFFECT_OFF       static_cast<uint8_t>(DsTriggerMode::Off)
+#define DS_TRIGGER_EFFECT_FEEDBACK  static_cast<uint8_t>(DsTriggerMode::Feedback)
+#define DS_TRIGGER_EFFECT_WEAPON    static_cast<uint8_t>(DsTriggerMode::Weapon)
+#define DS_TRIGGER_EFFECT_VIBRATION static_cast<uint8_t>(DsTriggerMode::Vibration)
+
+// Fully-classified sub-effect type returned by ParsedTriggerEffect::subtype().
+// DSX multiplexes several logical effects onto a single wire mode byte; this
+// enum exposes the resolved variant so callers can switch on one value without
+// replicating bitmask-contiguity or params[9] detection logic themselves.
+enum DsTriggerEffectSubtype : uint8_t {
+    DS_TRIGGER_SUBTYPE_OFF,
+    DS_TRIGGER_SUBTYPE_FEEDBACK,
+    DS_TRIGGER_SUBTYPE_SLOPE_FEEDBACK,
+    DS_TRIGGER_SUBTYPE_MULTIPLE_POSITION_FEEDBACK,
+    DS_TRIGGER_SUBTYPE_WEAPON,
+    DS_TRIGGER_SUBTYPE_VIBRATION,
+    DS_TRIGGER_SUBTYPE_MULTIPLE_POSITION_VIBRATION,
+    DS_TRIGGER_SUBTYPE_UNKNOWN,
+};
+
 // Forwards
 class DualsenseGamepadDevice;
 
@@ -93,9 +149,10 @@ private:
     DualsenseGamepadDevice* _device;
 };
 
-// DualSense BT Output Report structure (78 bytes total)
-// Based on Linux hid-playstation.c dualsense_output_report_bt struct
-#pragma pack(push, 1)
+// DualSense BT Output Report parsed view (wire format is 78 bytes).
+// Based on Linux hid-playstation.c dualsense_output_report_bt struct.
+// This is NOT a packed wire struct: load() decodes the raw bytes field by
+// field, so the struct layout doesn't need to match the wire layout.
 struct DualsenseGamepadOutputReportData {
     // BT Header (3 bytes)
     uint8_t report_id = 0;          // Byte 0: Should be 0x31
@@ -115,7 +172,17 @@ struct DualsenseGamepadOutputReportData {
     uint8_t mute_button_led = 0;    // Byte 11
 
     uint8_t power_save_control = 0; // Byte 12
-    uint8_t reserved2[27] = { 0 };  // Bytes 13-39
+
+    // Adaptive-trigger effect blocks (canonical layout from hid-playstation.c).
+    // Each trigger has 1 mode byte + 10 parameter bytes. For DS_TRIGGER_EFFECT_VIBRATION
+    // (0x26): params[0]=frequency (Hz), params[1]=amplitude (0..8), params[2]=start pos.
+    uint8_t right_trigger_motor_mode = 0;         // Byte 13
+    uint8_t right_trigger_param[10]  = { 0 };     // Bytes 14-23
+    uint8_t left_trigger_motor_mode  = 0;         // Byte 24
+    uint8_t left_trigger_param[10]   = { 0 };     // Bytes 25-34
+    uint8_t reserved_host_timestamp[4] = { 0 };   // Bytes 35-38
+    uint8_t reduce_motor_power       = 0;         // Byte 39
+
     uint8_t audio_control2 = 0;     // Byte 40
 
     uint8_t valid_flag2 = 0;        // Byte 41
@@ -130,6 +197,458 @@ struct DualsenseGamepadOutputReportData {
 
     uint8_t reserved4[24] = { 0 };  // Bytes 50-73
     uint32_t crc32 = 0;             // Bytes 74-77
+
+    // Decoded view of a Feedback effect (DS_TRIGGER_EFFECT_FEEDBACK, 0x21).
+    // Wire encoding:
+    //   params[0..1] : 10-bit LE bitmask — bit N = position N active.
+    //                  Positions >= start_position are set.
+    //   params[2..5] : 30-bit packed field, 3 bits per position.
+    //                  strength[pos] = (packed32 >> (pos*3)) & 7  (0-7 internal, 0 = min).
+    //                  DSX "Resistance N" maps to internal value N-1.
+    //   params[6..9] : unused / zero for this mode.
+    struct FeedbackTriggerEffect {
+        uint8_t  start_position;             // lowest active position in the bitmask (0-9)
+        uint16_t position_mask;              // raw 10-bit field; bit N = position N is active
+        uint8_t  per_position_strength[10];  // 0 = inactive; 1-8 = resistance at that position
+        const uint8_t* raw_params;           // raw 10-byte param array for advanced use
+
+        // Strength of the first active position (0 if none).
+        // In the common single-strength case (DSX) this is the uniform resistance level.
+        uint8_t strength() const {
+            for (int i = 0; i < 10; i++)
+                if (per_position_strength[i]) return per_position_strength[i];
+            return 0;
+        }
+    };
+
+    // Decoded view of a Weapon effect (DS_TRIGGER_EFFECT_WEAPON, 0x25).
+    // Wire encoding:
+    //   params[0..1] : 10-bit LE bitmask with exactly two bits set:
+    //                  the start_position bit and the end_position bit.
+    //                  start = lowest set bit, end = highest set bit.
+    //   params[2]    : resistance strength, 0-7 internal (= DSX strength - 1).
+    //   params[3..9] : unused / zero.
+    // Note: DSX clamps start to (end-1) when start >= end, so identical bytes
+    // may be seen for different UI start values when start >= end.
+    struct WeaponTriggerEffect {
+        uint8_t  start_position;  // 0-9: where the trigger goes stiff
+        uint8_t  end_position;    // 0-9: where the click releases
+        uint8_t  strength;        // 1-8: resistance level (DSX scale, = internal+1)
+        uint16_t position_mask;   // raw 10-bit field; exactly two bits set
+        const uint8_t* raw_params;
+    };
+
+    // Decoded view of a Slope Feedback effect.
+    // IMPORTANT: DSX encodes slope as DS_TRIGGER_EFFECT_FEEDBACK (0x21), NOT 0x22.
+    // The only wire-level difference from uniform Feedback is that per-position
+    // strengths vary linearly from start_strength (at start_position) to end_strength
+    // (at end_position), with all positions beyond end_position holding end_strength.
+    // Wire encoding is identical to FeedbackTriggerEffect.
+    //
+    // end_position detection caveat: rounding of the linear interpolation can cause
+    // two adjacent positions to share the same strength value at the end of the slope,
+    // shifting the detected end_position one earlier than the DSX UI value in some cases.
+    // When start_strength == end_strength (flat), end_position is set to the last
+    // active position as a best-effort approximation.
+    struct SlopeFeedbackEffect {
+        uint8_t  start_position;            // lowest active position (0-9)
+        uint8_t  end_position;              // best-effort detected slope end position
+        uint8_t  start_strength;            // resistance at start_position (1-8 DSX scale)
+        uint8_t  end_strength;              // resistance at last active position (1-8 DSX scale)
+        uint16_t position_mask;             // raw 10-bit field; bit N = position N is active
+        uint8_t  per_position_strength[10]; // 0 = inactive; 1-8 = resistance at that position
+        const uint8_t* raw_params;
+
+        // True when all active positions share the same strength (degenerate flat feedback).
+        bool isFlat() const {
+            for (int i = 0; i < 10; i++)
+                if (per_position_strength[i] && per_position_strength[i] != start_strength)
+                    return false;
+            return true;
+        }
+    };
+
+    // Decoded view of a Multiple Position Feedback effect.
+    // Wire encoding is identical to FeedbackTriggerEffect (same mode 0x21), but the
+    // bitmask in params[0..1] has a non-contiguous pattern — any combination of the
+    // 10 position bits may be set, with each position independently configurable.
+    // Distinguish from Feedback/Slope by checking bitmask contiguity: Feedback/Slope
+    // always have all bits from start_position to bit 9 set; MPF does not.
+    struct MultiPositionFeedbackEffect {
+        uint16_t position_mask;              // raw 10-bit field; any bits may be set
+        uint8_t  per_position_strength[10]; // 0 = inactive; 1-8 = resistance (DSX scale)
+        const uint8_t* raw_params;
+    };
+
+    // Decoded view of a Multiple Position Vibration effect.
+    // Wire encoding:
+    //   mode         : 0x26 — same wire mode as single Vibration.
+    //   params[0..1] : 10-bit LE bitmask — bit N = region N active (any combination).
+    //                  Can be contiguous (all regions from start to 9 active) — bitmask
+    //                  contiguity alone does NOT distinguish MPV from single Vibration.
+    //   params[2..5] : 30-bit packed field, 3 bits per position.
+    //                  amplitude[pos] = (packed32 >> (pos*3)) & 7  (0-7 internal).
+    //                  DSX "Amplitude N" maps to internal value N-1.
+    //   params[6..7] : unused / zero.
+    //   params[8]    : frequency in Hz (RELIABLE distinguishing factor from single Vibration).
+    //   params[9]    : always zero (single Vibration puts frequency here instead).
+    //
+    // To distinguish from single Vibration: check params[9].
+    //   params[9] != 0  →  single Vibration (frequency = params[9], params[8] = 0)
+    //   params[9] == 0  →  MPV             (frequency = params[8], params[9] = 0)
+    struct MultiPositionVibrationEffect {
+        uint16_t position_mask;               // raw 10-bit field; any bits may be set
+        uint8_t  per_position_amplitude[10];  // 0 = inactive; 1-8 = amplitude (DSX scale)
+        uint8_t  frequency;                   // Hz (from params[8], not params[9])
+        const uint8_t* raw_params;
+    };
+
+    // Decoded view of a Vibration effect (DS_TRIGGER_EFFECT_VIBRATION, 0x26).
+    // Wire encoding:
+    //   params[0..1] : 10-bit LE bitmask — bit N = position N active.
+    //                  Positions >= start_position are set (identical to Feedback).
+    //   params[2..5] : 30-bit packed field, 3 bits per position (identical to Feedback).
+    //                  amplitude[pos] = (packed32 >> (pos*3)) & 7  (0-7 internal).
+    //                  DSX "Amplitude N" maps to internal value N-1.
+    //   params[6..8] : params[6]=0, params[7]=0, params[8]=0 — p[8]=0 distinguishes this
+    //                  from MultiPositionVibrationEffect which puts frequency at p[8].
+    //   params[9]    : frequency in Hz — p[9]!=0 is the reliable single-Vibration marker.
+    //   (11 bytes total; params[0..9] = 10 bytes after the mode byte)
+    struct VibrationTriggerEffect {
+        uint8_t  start_position;             // lowest active position in the bitmask (0-9)
+        uint16_t position_mask;              // raw 10-bit field; bit N = position N is active
+        uint8_t  per_position_amplitude[10]; // 0 = inactive; 1-8 = amplitude at that position
+        uint8_t  frequency;                  // Hz (direct raw value from params[9])
+        const uint8_t* raw_params;
+
+        // Amplitude of the first active position (0 if none).
+        // In the common single-amplitude case (DSX) this is the uniform level.
+        uint8_t amplitude() const {
+            for (int i = 0; i < 10; i++)
+                if (per_position_amplitude[i]) return per_position_amplitude[i];
+            return 0;
+        }
+    };
+
+    // Generic accessor returned by leftTrigger() / rightTrigger().
+    // Subtype is classified eagerly when the accessor is called; subtype() is
+    // a one-load read of resolved_subtype. For mode-specific decoded views,
+    // call the matching as*() helper below.
+    struct ParsedTriggerEffect {
+        uint8_t                mode;             // raw wire byte; compare against DsTriggerMode
+        const uint8_t*         raw_params;       // points into the 10-byte param array
+        DsTriggerEffectSubtype resolved_subtype; // populated by classifySubtype()
+
+        // Decode as a Feedback effect. Only call when mode == DS_TRIGGER_EFFECT_FEEDBACK.
+        FeedbackTriggerEffect asFeedback() const {
+            FeedbackTriggerEffect fb;
+            fb.raw_params = raw_params;
+
+            // 10-bit position bitmask from params[0..1]
+            fb.position_mask = (uint16_t)raw_params[0] | ((uint16_t)raw_params[1] << 8);
+            fb.position_mask &= 0x03FF;
+
+            // start_position = lowest set bit
+            fb.start_position = 0;
+            for (int i = 0; i < 10; i++) {
+                if (fb.position_mask & (1 << i)) { fb.start_position = (uint8_t)i; break; }
+            }
+
+            // 30-bit packed strengths from params[2..5], 3 bits per position
+            uint32_t packed = (uint32_t)raw_params[2]
+                            | ((uint32_t)raw_params[3] << 8)
+                            | ((uint32_t)raw_params[4] << 16)
+                            | ((uint32_t)raw_params[5] << 24);
+
+            for (int i = 0; i < 10; i++) {
+                if (fb.position_mask & (1 << i))
+                    fb.per_position_strength[i] = (uint8_t)(((packed >> (i * 3)) & 0x7) + 1);
+                else
+                    fb.per_position_strength[i] = 0;
+            }
+
+            return fb;
+        }
+
+        // Decode as a Weapon effect. Only call when mode == DS_TRIGGER_EFFECT_WEAPON.
+        WeaponTriggerEffect asWeapon() const {
+            WeaponTriggerEffect w;
+            w.raw_params = raw_params;
+
+            // 10-bit position bitmask from params[0..1]; exactly two bits set
+            w.position_mask = (uint16_t)raw_params[0] | ((uint16_t)raw_params[1] << 8);
+            w.position_mask &= 0x03FF;
+
+            // start = lowest set bit, end = highest set bit
+            w.start_position = 0;
+            for (int i = 0; i < 10; i++) {
+                if (w.position_mask & (1 << i)) { w.start_position = (uint8_t)i; break; }
+            }
+            w.end_position = 0;
+            for (int i = 9; i >= 0; i--) {
+                if (w.position_mask & (1 << i)) { w.end_position = (uint8_t)i; break; }
+            }
+
+            // params[2]: internal 0-7 → DSX 1-8
+            w.strength = raw_params[2] + 1;
+
+            return w;
+        }
+
+        // Decode as a Slope Feedback effect. Call when mode == DS_TRIGGER_EFFECT_FEEDBACK (0x21)
+        // and the per-position strengths are known to vary (i.e., DSX Slope preset).
+        // Also works for uniform Feedback — isFlat() will return true in that case.
+        SlopeFeedbackEffect asSlope() const {
+            SlopeFeedbackEffect s;
+            s.raw_params = raw_params;
+
+            // 10-bit position bitmask from params[0..1]
+            s.position_mask = (uint16_t)raw_params[0] | ((uint16_t)raw_params[1] << 8);
+            s.position_mask &= 0x03FF;
+
+            // Locate first and last active positions
+            s.start_position = 0;
+            uint8_t last_active = 0;
+            for (int i = 0; i < 10; i++)
+                if (s.position_mask & (1 << i)) { s.start_position = (uint8_t)i; break; }
+            for (int i = 9; i >= 0; i--)
+                if (s.position_mask & (1 << i)) { last_active = (uint8_t)i; break; }
+
+            // 30-bit packed strengths from params[2..5], 3 bits per position
+            uint32_t packed = (uint32_t)raw_params[2]
+                            | ((uint32_t)raw_params[3] << 8)
+                            | ((uint32_t)raw_params[4] << 16)
+                            | ((uint32_t)raw_params[5] << 24);
+
+            for (int i = 0; i < 10; i++) {
+                if (s.position_mask & (1 << i))
+                    s.per_position_strength[i] = (uint8_t)(((packed >> (i * 3)) & 0x7) + 1);
+                else
+                    s.per_position_strength[i] = 0;
+            }
+
+            s.start_strength = s.per_position_strength[s.start_position];
+            s.end_strength   = s.per_position_strength[last_active];
+
+            // Detect end_position: scan backward through the flat tail at end_strength.
+            // end_position = last position where strength still differs from its successor.
+            // Falls back to last_active when the effect is flat (start == end strength).
+            s.end_position = last_active;
+            bool found_change = false;
+            for (int i = (int)last_active - 1; i >= (int)s.start_position; i--) {
+                if (s.per_position_strength[i + 1] != s.per_position_strength[i]) {
+                    found_change = true;
+                    break;
+                }
+                s.end_position = (uint8_t)i;
+            }
+            if (!found_change) s.end_position = last_active;
+
+            return s;
+        }
+
+        // Decode as a Vibration effect. Only call when mode == DS_TRIGGER_EFFECT_VIBRATION.
+        // Encoding is identical to Feedback for the position mask (params[0..1]) and
+        // per-position amplitude (params[2..5], 3 bits each, internal+1 = DSX scale).
+        // params[9] carries frequency in Hz directly.
+        VibrationTriggerEffect asVibration() const {
+            VibrationTriggerEffect v;
+            v.raw_params = raw_params;
+
+            // 10-bit position bitmask from params[0..1]
+            v.position_mask = (uint16_t)raw_params[0] | ((uint16_t)raw_params[1] << 8);
+            v.position_mask &= 0x03FF;
+
+            // start_position = lowest set bit
+            v.start_position = 0;
+            for (int i = 0; i < 10; i++) {
+                if (v.position_mask & (1 << i)) { v.start_position = (uint8_t)i; break; }
+            }
+
+            // 30-bit packed amplitudes from params[2..5], 3 bits per position
+            uint32_t packed = (uint32_t)raw_params[2]
+                            | ((uint32_t)raw_params[3] << 8)
+                            | ((uint32_t)raw_params[4] << 16)
+                            | ((uint32_t)raw_params[5] << 24);
+
+            for (int i = 0; i < 10; i++) {
+                if (v.position_mask & (1 << i))
+                    v.per_position_amplitude[i] = (uint8_t)(((packed >> (i * 3)) & 0x7) + 1);
+                else
+                    v.per_position_amplitude[i] = 0;
+            }
+
+            // params[9]: frequency in Hz (direct value)
+            v.frequency = raw_params[9];
+
+            return v;
+        }
+
+        // Decode as a Multiple Position Feedback effect.
+        // Call when mode == DS_TRIGGER_EFFECT_FEEDBACK (0x21) and the bitmask is
+        // non-contiguous (i.e., not all bits from start_position to bit 9 are set).
+        // Wire encoding is identical to asFeedback().
+        MultiPositionFeedbackEffect asMultiPosition() const {
+            MultiPositionFeedbackEffect mp;
+            mp.raw_params = raw_params;
+
+            mp.position_mask = (uint16_t)raw_params[0] | ((uint16_t)raw_params[1] << 8);
+            mp.position_mask &= 0x03FF;
+
+            uint32_t packed = (uint32_t)raw_params[2]
+                            | ((uint32_t)raw_params[3] << 8)
+                            | ((uint32_t)raw_params[4] << 16)
+                            | ((uint32_t)raw_params[5] << 24);
+
+            for (int i = 0; i < 10; i++) {
+                if (mp.position_mask & (1 << i))
+                    mp.per_position_strength[i] = (uint8_t)(((packed >> (i * 3)) & 0x7) + 1);
+                else
+                    mp.per_position_strength[i] = 0;
+            }
+
+            return mp;
+        }
+
+        // Decode as a Multiple Position Vibration effect.
+        // Call when mode == DS_TRIGGER_EFFECT_VIBRATION (0x26) and the bitmask is
+        // non-contiguous (i.e., not all bits from start_position to bit 9 are set).
+        // Note: frequency is read from params[8], NOT params[9] as in asVibration().
+        MultiPositionVibrationEffect asMultiVibration() const {
+            MultiPositionVibrationEffect mv;
+            mv.raw_params = raw_params;
+
+            mv.position_mask = (uint16_t)raw_params[0] | ((uint16_t)raw_params[1] << 8);
+            mv.position_mask &= 0x03FF;
+
+            uint32_t packed = (uint32_t)raw_params[2]
+                            | ((uint32_t)raw_params[3] << 8)
+                            | ((uint32_t)raw_params[4] << 16)
+                            | ((uint32_t)raw_params[5] << 24);
+
+            for (int i = 0; i < 10; i++) {
+                if (mv.position_mask & (1 << i))
+                    mv.per_position_amplitude[i] = (uint8_t)(((packed >> (i * 3)) & 0x7) + 1);
+                else
+                    mv.per_position_amplitude[i] = 0;
+            }
+
+            mv.frequency = raw_params[8];
+
+            return mv;
+        }
+
+        // Classified sub-effect. Populated eagerly by classifySubtype() when this
+        // struct is built by leftTrigger() / rightTrigger(); subtype() is a cheap
+        // one-load read.
+        DsTriggerEffectSubtype subtype() const { return resolved_subtype; }
+
+        // Classify a raw (mode, params) pair into a DsTriggerEffectSubtype.
+        //
+        // DsTriggerMode::Feedback (0x21) is disambiguated by position-mask contiguity:
+        //   contiguous + uniform strengths  → DS_TRIGGER_SUBTYPE_FEEDBACK
+        //   contiguous + varying strengths  → DS_TRIGGER_SUBTYPE_SLOPE_FEEDBACK
+        //   non-contiguous                  → DS_TRIGGER_SUBTYPE_MULTIPLE_POSITION_FEEDBACK
+        //
+        // DsTriggerMode::Vibration (0x26) is disambiguated by frequency byte position:
+        //   params[9] != 0  → DS_TRIGGER_SUBTYPE_VIBRATION            (freq at params[9])
+        //   params[9] == 0  → DS_TRIGGER_SUBTYPE_MULTIPLE_POSITION_VIBRATION (freq at params[8])
+        static DsTriggerEffectSubtype classifySubtype(uint8_t mode, const uint8_t* params) {
+            switch (static_cast<DsTriggerMode>(mode)) {
+                case DsTriggerMode::Off:
+                    return DS_TRIGGER_SUBTYPE_OFF;
+
+                case DsTriggerMode::Feedback: {
+                    uint16_t mask = (uint16_t)params[0] | ((uint16_t)params[1] << 8);
+                    mask &= 0x03FF;
+
+                    int bstart = -1;
+                    for (int i = 0; i < 10; i++) {
+                        if (mask & (1 << i)) { bstart = i; break; }
+                    }
+                    bool contiguous = (bstart < 0);
+                    if (bstart >= 0) {
+                        uint16_t expected = 0;
+                        for (int i = bstart; i < 10; i++) expected |= (uint16_t)(1 << i);
+                        contiguous = (mask == expected);
+                    }
+
+                    if (!contiguous)
+                        return DS_TRIGGER_SUBTYPE_MULTIPLE_POSITION_FEEDBACK;
+
+                    uint32_t packed = (uint32_t)params[2]
+                                    | ((uint32_t)params[3] << 8)
+                                    | ((uint32_t)params[4] << 16)
+                                    | ((uint32_t)params[5] << 24);
+                    uint8_t first = 0;
+                    bool found = false, flat = true;
+                    for (int i = 0; i < 10 && flat; i++) {
+                        if (!(mask & (1 << i))) continue;
+                        uint8_t s = (uint8_t)(((packed >> (i * 3)) & 0x7) + 1);
+                        if (!found) { first = s; found = true; }
+                        else if (s != first) flat = false;
+                    }
+                    return flat ? DS_TRIGGER_SUBTYPE_FEEDBACK : DS_TRIGGER_SUBTYPE_SLOPE_FEEDBACK;
+                }
+
+                case DsTriggerMode::Weapon:
+                    return DS_TRIGGER_SUBTYPE_WEAPON;
+
+                case DsTriggerMode::Vibration:
+                    return (params[9] != 0)
+                        ? DS_TRIGGER_SUBTYPE_VIBRATION
+                        : DS_TRIGGER_SUBTYPE_MULTIPLE_POSITION_VIBRATION;
+
+                default:
+                    return DS_TRIGGER_SUBTYPE_UNKNOWN;
+            }
+        }
+    };
+    ParsedTriggerEffect leftTrigger() const {
+        return { left_trigger_motor_mode, left_trigger_param,
+                 ParsedTriggerEffect::classifySubtype(left_trigger_motor_mode, left_trigger_param) };
+    }
+    ParsedTriggerEffect rightTrigger() const {
+        return { right_trigger_motor_mode, right_trigger_param,
+                 ParsedTriggerEffect::classifySubtype(right_trigger_motor_mode, right_trigger_param) };
+    }
+
+    // ----- Named predicate accessors --------------------------------------
+    // Wrap the raw valid_flag* bit checks so user code reads as intent rather
+    // than as bit arithmetic. The raw flag bytes and DS_OUT_FLAG*_* macros
+    // remain public for advanced use.
+
+    // True when the host intends the motor bytes to be applied.
+    // The explicit-flag path covers standard DualSense output reports.
+    // The zero-flag fallback covers the motor-stop reports that Steam sends
+    // with neither flag set (empirically, Steam clears both flags when
+    // sending motors=0 to stop rumble, even though it sets them for motor-on).
+    bool hasRumble() const {
+        return (valid_flag0 & DS_OUT_FLAG0_COMPATIBLE_VIBRATION)
+            || (valid_flag2 & DS_OUT_FLAG2_COMPATIBLE_VIBRATION2)
+            || (valid_flag0 == 0 && valid_flag2 == 0);
+    }
+
+    // Adaptive triggers — true when the host populated the corresponding
+    // 11-byte trigger effect block (mode + 10 params). Use leftTrigger() /
+    // rightTrigger() to decode.
+    bool hasLeftTriggerEffect()  const { return valid_flag0 & DS_OUT_FLAG0_LEFT_TRIGGER_EFFECT;  }
+    bool hasRightTriggerEffect() const { return valid_flag0 & DS_OUT_FLAG0_RIGHT_TRIGGER_EFFECT; }
+
+    // LEDs / lightbar — DSX often sets LIGHTBAR_SETUP without LIGHTBAR;
+    // hasLightbar() reports either path.
+    bool hasLightbar() const {
+        return (valid_flag1 & DS_OUT_FLAG1_LIGHTBAR)
+            || (valid_flag2 & DS_OUT_FLAG2_LIGHTBAR_SETUP);
+    }
+    bool hasPlayerIndicator() const { return valid_flag1 & DS_OUT_FLAG1_PLAYER_INDICATOR; }
+    bool hasMicMuteLed()      const { return valid_flag1 & DS_OUT_FLAG1_MIC_MUTE_LED;     }
+
+    // Convenience aliases mirroring the canonical wire roles. motor_left is
+    // the weak (high-frequency) motor; motor_right is the strong (low-
+    // frequency) motor.
+    uint8_t weakMotor()   const { return motor_left;  }
+    uint8_t strongMotor() const { return motor_right; }
 
     // default constructor OK
     DualsenseGamepadOutputReportData() = default;
@@ -222,7 +741,15 @@ struct DualsenseGamepadOutputReportData {
         audio_control = value[common_offset + 7];
         mute_button_led = value[common_offset + 8];
         power_save_control = value[common_offset + 9];
-        // reserved2[27] at common+10 through common+36
+
+        // Adaptive-trigger blocks at common+10 through common+36.
+        right_trigger_motor_mode = value[common_offset + 10];
+        for (int i = 0; i < 10; ++i) right_trigger_param[i] = value[common_offset + 11 + i];
+        left_trigger_motor_mode = value[common_offset + 21];
+        for (int i = 0; i < 10; ++i) left_trigger_param[i]  = value[common_offset + 22 + i];
+        for (int i = 0; i < 4;  ++i) reserved_host_timestamp[i] = value[common_offset + 32 + i];
+        reduce_motor_power = value[common_offset + 36];
+
         audio_control2 = value[common_offset + 37];
 
         valid_flag2 = value[common_offset + 38];
@@ -247,10 +774,7 @@ struct DualsenseGamepadOutputReportData {
 
         return true;
     }
-}__attribute__((packed));
-#pragma pack(pop)
-
-static_assert(sizeof(DualsenseGamepadOutputReportData) == DS_OUTPUT_REPORT_BT_SIZE, "Wrong size - expected 78 bytes");
+};
 
 // DualSense BLE Input Report structure (77 bytes, sent after report ID 0x31 prepended by HID layer)
 // Byte layout matches `struct dualsense_input_report` in Linux hid-playstation.c
