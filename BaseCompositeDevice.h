@@ -4,6 +4,7 @@
 //#include <HIDKeyboardTypes.h>
 #include <NimBLECharacteristic.h>
 #include <NimBLEHIDDevice.h>
+#include <functional>
 #include "BLEHostConfiguration.h"
 
 // Forwards

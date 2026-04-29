@@ -1,10 +1,13 @@
 #include "DualsenseGamepadDevice.h"
 #include "BleCompositeHID.h"
 #include "DualsenseDescriptors.h"
+#include "ArduinoDefines.h"
 #include <cstdint>
+#include <functional>
 #include <stdint.h>
 #include <string.h>
 #include "esp_mac.h"
+#include "esp_cpu.h"
 #if defined(CONFIG_ARDUHAL_ESP_LOG)
 #include "esp32-hal-log.h"
 #define LOG_TAG "DualsenseGamepadDevice"
@@ -612,7 +615,7 @@ void DualsenseGamepadDevice::seq()
 }
 void DualsenseGamepadDevice::timestamp()
 {
-    uint32_t cycles = ESP.getCycleCount() / 1500;
+    uint32_t cycles = esp_cpu_get_cycle_count() / 1500;
 
     _inputReport.timestamp = cycles;
 }
