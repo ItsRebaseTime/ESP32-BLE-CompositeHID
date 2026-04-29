@@ -7,6 +7,7 @@
 class DualsenseGamepadDeviceConfiguration : public BaseCompositeDeviceConfiguration {
 public:
     DualsenseGamepadDeviceConfiguration(uint8_t reportId = DUALSENSE_EDGE_INPUT_REPORT_ID);
+    virtual ~DualsenseGamepadDeviceConfiguration() = default;
     virtual uint8_t getDeviceReportSize() const override { return 0; }
     virtual size_t makeDeviceReport(uint8_t* buffer, size_t bufferSize) const override
     {

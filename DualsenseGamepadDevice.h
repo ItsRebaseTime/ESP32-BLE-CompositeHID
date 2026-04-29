@@ -834,7 +834,7 @@ struct DualsenseGamepadPairingReportdata {
 static_assert(sizeof(DualsenseGamepadPairingReportdata) == DUALSENSE_PAIRING_INFO_REPORT_SIZE,
     "DualsenseGamepadPairingReportdata must match DUALSENSE_PAIRING_INFO_REPORT_SIZE and the HID descriptor's Report Count for 0x09");
 
-static uint8_t dPadDirectionToValue(DualsenseDpadFlags direction)
+[[maybe_unused]] static uint8_t dPadDirectionToValue(DualsenseDpadFlags direction)
 {
     if (direction == DualsenseDpadFlags::NORTH)
         return DUALSENSE_BUTTON_DPAD_NORTH;
@@ -856,7 +856,7 @@ static uint8_t dPadDirectionToValue(DualsenseDpadFlags direction)
     return DUALSENSE_BUTTON_DPAD_NONE;
 }
 
-static String dPadDirectionName(uint8_t direction)
+[[maybe_unused]] static String dPadDirectionName(uint8_t direction)
 {
     if (direction == DUALSENSE_BUTTON_DPAD_NORTH)
         return "NORTH";

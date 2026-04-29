@@ -60,7 +60,7 @@ DualsenseGamepadCallbacks::DualsenseGamepadCallbacks(DualsenseGamepadDevice* dev
 void DualsenseGamepadCallbacks::onWrite(NimBLECharacteristic* pCharacteristic, NimBLEConnInfo& connInfo)
 {
     // Get the characteristic handle to identify which characteristic was written
-    uint16_t handle = pCharacteristic->getHandle();
+    [[maybe_unused]] uint16_t handle = pCharacteristic->getHandle();
 
     const NimBLEAttValue& value = pCharacteristic->getValue();
     size_t len = value.size();
@@ -72,7 +72,7 @@ void DualsenseGamepadCallbacks::onWrite(NimBLECharacteristic* pCharacteristic, N
     }
 
     const uint8_t* data = value.data();
-    const char* role = "unknown";
+    [[maybe_unused]] const char* role = "unknown";
     if (_device) {
         if (pCharacteristic == _device->getOutputChar())         role = "OUTPUT-0x31";
         else if (pCharacteristic == _device->getCalibration())   role = "FEATURE-0x05";
@@ -102,7 +102,7 @@ void DualsenseGamepadCallbacks::onRead(NimBLECharacteristic* pCharacteristic, Ni
 {
     // When Steam/host reads a feature report, we need to populate it with current data
     // The characteristic handle can help identify which report is being read
-    uint16_t handle = pCharacteristic->getHandle();
+    [[maybe_unused]] uint16_t handle = pCharacteristic->getHandle();
 
     ESP_LOGD(LOG_TAG, "*** onRead triggered: handle=%d, connHandle=%d ***", handle, connInfo.getConnHandle());
 
@@ -113,9 +113,9 @@ void DualsenseGamepadCallbacks::onRead(NimBLECharacteristic* pCharacteristic, Ni
 
 void DualsenseGamepadCallbacks::onSubscribe(NimBLECharacteristic* pCharacteristic, NimBLEConnInfo& connInfo, uint16_t subValue)
 {
-    uint16_t handle = pCharacteristic->getHandle();
+    [[maybe_unused]] uint16_t handle = pCharacteristic->getHandle();
+    [[maybe_unused]] const char* role = "unknown";
 
-    const char* role = "unknown";
     if (_device) {
         if (pCharacteristic == _device->getInputChar())          role = "INPUT-0x31";
         else if (pCharacteristic == _device->getOutputChar())    role = "OUTPUT-0x31";
@@ -138,25 +138,26 @@ void DualsenseGamepadCallbacks::onStatus(NimBLECharacteristic* pCharacteristic, 
 DualsenseGamepadDevice::DualsenseGamepadDevice()
     : _config(new DualsenseEdgeControllerDeviceConfiguration())
     , _extra_input(nullptr)
+    , _minimalInput(nullptr)
     , _callbacks(nullptr)
     , _firmwareInfo(nullptr)
     , _calibration(nullptr)
     , _pairingInfo(nullptr)
     , _btPatchInfo(nullptr)
-    , _minimalInput(nullptr)
+
 {
 }
 
 // DualsenseGamepadDevice methods
 DualsenseGamepadDevice::DualsenseGamepadDevice(DualsenseGamepadDeviceConfiguration* config)
     : _config(config)
+    , _minimalInput(nullptr)
     , _extra_input(nullptr)
     , _callbacks(nullptr)
     , _firmwareInfo(nullptr)
     , _calibration(nullptr)
     , _pairingInfo(nullptr)
     , _btPatchInfo(nullptr)
-    , _minimalInput(nullptr)
 {
 }
 
@@ -665,7 +666,7 @@ void DualsenseGamepadDevice::sendGamepadReportImpl()
 
     {
         std::lock_guard<std::mutex> lock(_mutex);
-        size_t packedSize = sizeof(_inputReport);
+        [[maybe_unused]] size_t packedSize = sizeof(_inputReport);
         ESP_LOGD(LOG_TAG, "Sending gamepad report, size: %d", packedSize);
         uint8_t bthdr[] = { PS_INPUT_CRC32_SEED, DUALSENSE_EDGE_INPUT_REPORT_ID };
         uint32_t crc = 0;
