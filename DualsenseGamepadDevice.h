@@ -940,10 +940,10 @@ private:
     DualsenseGamepadPairingReportdata _pairingReport;
     void buildFeatureReportWithCrc(uint8_t reportId, const uint8_t* payload,
         size_t payloadSize, uint8_t* outBuffer, size_t outSize);
+    DualsenseGamepadDeviceConfiguration* _config;
     NimBLECharacteristic* _extra_input;
     NimBLECharacteristic* _minimalInput;  // 0x01 9-byte Generic Desktop input report (BLE GAP requirement)
     DualsenseGamepadCallbacks* _callbacks;
-    DualsenseGamepadDeviceConfiguration* _config;
     NimBLECharacteristic* _calibration;
     NimBLECharacteristic* _firmwareInfo;
     NimBLECharacteristic* _pairingInfo;
