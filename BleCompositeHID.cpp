@@ -1,13 +1,14 @@
 #include <NimBLEDevice.h>
 #include <NimBLEUtils.h>
 #include <NimBLEServer.h>
+
 #include "NimBLEHIDDevice.h"
 #include "HIDTypes.h"
 #include "HIDKeyboardTypes.h"
 #include "sdkconfig.h"
-
 #include "BleCompositeHID.h"
 #include "BleConnectionStatus.h"
+#include "ArduinoDefines.h"
 
 #include <sstream>
 #include <iostream>
@@ -209,9 +210,6 @@ void BleCompositeHID::taskServer(void *pvParameter)
             return;
         } else if(reportSize == 0){
             ESP_LOGE(LOG_TAG, "Device report size is 0");
-            return;
-        } else if(reportSize < 0){
-            ESP_LOGE(LOG_TAG, "Error creating report for device %s", config->getDeviceName());
             return;
         } else {
             ESP_LOGD(LOG_TAG, "Created device %s with report size %d", config->getDeviceName(), reportSize);
