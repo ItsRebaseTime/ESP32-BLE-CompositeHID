@@ -30,6 +30,7 @@
 #include <BleConnectionStatus.h>
 #include <BleCompositeHID.h>
 #include <DualsenseGamepadDevice.h>
+#include "ArduinoDefines.h"
 #define CONFIG_BT_NIMBLE_EXT_ADV 1
 
 int ledPin = LED_BUILTIN; // LED connected to digital pin 8
