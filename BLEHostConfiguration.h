@@ -71,7 +71,7 @@ public:
 
 private:
     uint32_t _deferSendRate;
-    _threadedAutoSend(false),
+    bool _threadedAutoSend;
 };
 
 #endif
