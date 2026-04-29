@@ -48,17 +48,17 @@ void XboxGamepadCallbacks::onStatus(NimBLECharacteristic* pCharacteristic, int c
 }
 
 XboxGamepadDevice::XboxGamepadDevice() :
-    _config(new XboxOneSControllerDeviceConfiguration()),
     _extra_input(nullptr),
-    _callbacks(nullptr)
+    _callbacks(nullptr),
+    _config(new XboxOneSControllerDeviceConfiguration())
 {
 }
 
 // XboxGamepadDevice methods
 XboxGamepadDevice::XboxGamepadDevice(XboxGamepadDeviceConfiguration* config) :
-    _config(config),
     _extra_input(nullptr),
-    _callbacks(nullptr)
+    _callbacks(nullptr),
+    _config(config)
 {
 }
 
