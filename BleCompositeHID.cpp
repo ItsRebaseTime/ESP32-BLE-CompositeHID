@@ -273,11 +273,7 @@ void BleCompositeHID::taskServer(void *pvParameter)
     // NimBLEDevice::setSecurityAuth(BLE_SM_PAIR_AUTHREQ_BOND);  //BLE_SM_PAIR_AUTHREQ_SC
 	NimBLEDevice::setSecurityAuth(true, false, false); // enable bonding, no MITM, no SC
 
-    // Start BLE server
-#pragma GCC diagnostic push
-#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
-    BleCompositeHIDInstance->_hid->startServices();
-#pragma GCC diagnostic pop
+    // Call onStarted on derived class instances
     BleCompositeHIDInstance->onStarted(pServer);
 
     // Start BLE advertisement

@@ -416,7 +416,7 @@ size_t GamepadConfiguration::makeDeviceReport(uint8_t* buffer, size_t bufferSize
             }
 
             // INPUT (Data,Var,Abs)
-            tempHidReportDescriptor[reportSize++] = HIDINPUT(1); 0x81;
+            tempHidReportDescriptor[reportSize++] = HIDINPUT(1); //0x81;
             tempHidReportDescriptor[reportSize++] = 0x02;
 
             // END_COLLECTION (Physical)
