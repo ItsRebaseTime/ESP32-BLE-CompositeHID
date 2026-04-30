@@ -2,6 +2,7 @@
 #include "BleCompositeHID.h"
 #include "DualsenseDescriptors.h"
 #include "ArduinoDefines.h"
+#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <stdint.h>
@@ -233,15 +234,15 @@ void DualsenseGamepadDevice::init(NimBLEHIDDevice* hid)
     // This is critical for Steam to recognize controller capabilities (vibration, etc.)
     ESP_LOGI(LOG_TAG, "Pre-populating feature reports...");
 
-    uint8_t calibBuf[DUALSENSE_CALIBRATION_REPORT_SIZE];
+    uint8_t calibBuf[DUALSENSE_CALIBRATION_REPORT_SIZE] = {};
     buildFeatureReportWithCrc(DUALSENSE_CALIBRATION_REPORT_ID,
-        DualsenseEdge_StockCalibration, DUALSENSE_CALIBRATION_REPORT_SIZE - 4,
+        DualsenseEdge_StockCalibration, DUALSENSE_CALIBRATION_REPORT_SIZE - 5,
         calibBuf, DUALSENSE_CALIBRATION_REPORT_SIZE);
     _calibration->setValue(calibBuf, DUALSENSE_CALIBRATION_REPORT_SIZE);
 
-    uint8_t firmBuf[DUALSENSE_FIRMWARE_INFO_REPORT_SIZE];
+    uint8_t firmBuf[DUALSENSE_FIRMWARE_INFO_REPORT_SIZE] = {};
     buildFeatureReportWithCrc(DUALSENSE_FIRMWARE_INFO_REPORT_ID,
-        DualsenseEdge_FirmwareInfo, DUALSENSE_FIRMWARE_INFO_REPORT_SIZE - 4,
+        DualsenseEdge_FirmwareInfo, DUALSENSE_FIRMWARE_INFO_REPORT_SIZE - 5,
         firmBuf, DUALSENSE_FIRMWARE_INFO_REPORT_SIZE);
     _firmwareInfo->setValue(firmBuf, DUALSENSE_FIRMWARE_INFO_REPORT_SIZE);
 
@@ -252,7 +253,7 @@ void DualsenseGamepadDevice::init(NimBLEHIDDevice* hid)
     memcpy(_pairingReport.common, (uint8_t*)&DualsenseEdge_PairInfo_common, 9);
     uint8_t pairHdr[] = { PS_FEATURE_CRC32_SEED, DUALSENSE_PAIRING_INFO_REPORT_ID };
     uint32_t pairCrc = crc32_le(0xFFFFFFFF, pairHdr, sizeof(pairHdr));
-    pairCrc = ~crc32_le(pairCrc, (uint8_t*)&_pairingReport, sizeof(_pairingReport) - 4);
+    pairCrc = ~crc32_le(pairCrc, (uint8_t*)&_pairingReport, offsetof(DualsenseGamepadPairingReportdata, crc32));
     _pairingReport.crc32 = pairCrc;
     _pairingInfo->setValue((uint8_t*)&_pairingReport, DUALSENSE_PAIRING_INFO_REPORT_SIZE);
 
@@ -693,9 +694,9 @@ void DualsenseGamepadDevice::sendFirmInfoReportImpl()
         std::lock_guard<std::mutex> lock(_mutex);
         size_t packedSize = DUALSENSE_FIRMWARE_INFO_REPORT_SIZE;
         ESP_LOGD(LOG_TAG, "Sending firmware info report, size: %d", packedSize);
-        uint8_t buf[DUALSENSE_FIRMWARE_INFO_REPORT_SIZE];
+        uint8_t buf[DUALSENSE_FIRMWARE_INFO_REPORT_SIZE] = {};
         buildFeatureReportWithCrc(DUALSENSE_FIRMWARE_INFO_REPORT_ID,
-            DualsenseEdge_FirmwareInfo, DUALSENSE_FIRMWARE_INFO_REPORT_SIZE - 4,
+            DualsenseEdge_FirmwareInfo, DUALSENSE_FIRMWARE_INFO_REPORT_SIZE - 5,
             buf, DUALSENSE_FIRMWARE_INFO_REPORT_SIZE);
         firminfo->setValue(buf, packedSize);
     }
@@ -716,9 +717,9 @@ void DualsenseGamepadDevice::sendCalibrationReportImpl()
         std::lock_guard<std::mutex> lock(_mutex);
         size_t packedSize = DUALSENSE_CALIBRATION_REPORT_SIZE;
         ESP_LOGD(LOG_TAG, "Sending calibration report, size: %d", packedSize);
-        uint8_t buf[DUALSENSE_CALIBRATION_REPORT_SIZE];
+        uint8_t buf[DUALSENSE_CALIBRATION_REPORT_SIZE] = {};
         buildFeatureReportWithCrc(DUALSENSE_CALIBRATION_REPORT_ID,
-            DualsenseEdge_StockCalibration, DUALSENSE_CALIBRATION_REPORT_SIZE - 4,
+            DualsenseEdge_StockCalibration, DUALSENSE_CALIBRATION_REPORT_SIZE - 5,
             buf, DUALSENSE_CALIBRATION_REPORT_SIZE);
         calibration->setValue(buf, packedSize);
     }
@@ -744,7 +745,7 @@ void DualsenseGamepadDevice::sendPairingInfoReportImpl()
         uint8_t bthdr[] = { PS_FEATURE_CRC32_SEED, DUALSENSE_PAIRING_INFO_REPORT_ID };
         uint32_t crc = 0;
         crc = this->crc32_le(0xFFFFFFFF, (uint8_t*)&bthdr, sizeof(bthdr));
-        crc = ~this->crc32_le(crc, (uint8_t*)&_pairingReport, sizeof(_pairingReport) - 4);
+        crc = ~this->crc32_le(crc, (uint8_t*)&_pairingReport, offsetof(DualsenseGamepadPairingReportdata, crc32));
         _pairingReport.crc32 = crc;
         ESP_LOGD(LOG_TAG, "got pairing CRC %lx", crc);
         size_t packedSize = DUALSENSE_PAIRING_INFO_REPORT_SIZE;
@@ -791,9 +792,9 @@ void DualsenseGamepadDevice::populateFeatureReportOnRead(NimBLECharacteristic* p
     else if (pCharacteristic == _firmwareInfo) {
         ESP_LOGI(LOG_TAG, "Host reading firmware info report (0x20) - populating data");
         std::lock_guard<std::mutex> lock(_mutex);
-        uint8_t buf[DUALSENSE_FIRMWARE_INFO_REPORT_SIZE];
+        uint8_t buf[DUALSENSE_FIRMWARE_INFO_REPORT_SIZE] = {};
         buildFeatureReportWithCrc(DUALSENSE_FIRMWARE_INFO_REPORT_ID,
-            DualsenseEdge_FirmwareInfo, DUALSENSE_FIRMWARE_INFO_REPORT_SIZE - 4,
+            DualsenseEdge_FirmwareInfo, DUALSENSE_FIRMWARE_INFO_REPORT_SIZE - 5,
             buf, DUALSENSE_FIRMWARE_INFO_REPORT_SIZE);
         pCharacteristic->setValue(buf, DUALSENSE_FIRMWARE_INFO_REPORT_SIZE);
     }
@@ -809,7 +810,7 @@ void DualsenseGamepadDevice::populateFeatureReportOnRead(NimBLECharacteristic* p
         uint8_t bthdr[] = { PS_FEATURE_CRC32_SEED, DUALSENSE_PAIRING_INFO_REPORT_ID };
         uint32_t crc = 0;
         crc = this->crc32_le(0xFFFFFFFF, (uint8_t*)&bthdr, sizeof(bthdr));
-        crc = ~this->crc32_le(crc, (uint8_t*)&_pairingReport, sizeof(_pairingReport) - 4);
+        crc = ~this->crc32_le(crc, (uint8_t*)&_pairingReport, offsetof(DualsenseGamepadPairingReportdata, crc32));
         _pairingReport.crc32 = crc;
 
         std::lock_guard<std::mutex> lock(_mutex);

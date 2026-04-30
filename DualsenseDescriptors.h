@@ -25,14 +25,21 @@
 #define PS_FEATURE_CRC32_SEED 0xA3
 #define DUALSENSE_CALIBRATION_REPORT_ID 0x05
 // Sizes match the HID descriptor's Report Count for each feature report.
-// The BLE characteristic value contains payload only (no leading report ID byte);
-// Linux hid-playstation's DS_FEATURE_REPORT_*_SIZE constants include the report ID,
-// so they are one byte larger than the sizes here.
-#define DUALSENSE_CALIBRATION_REPORT_SIZE 40
+// The BLE characteristic value contains payload only (no leading report ID byte).
+
+// Linux note:
+// Linux hid-playstation's DS_FEATURE_REPORT_*_SIZE constants include the report ID
+// (one byte larger), but BlueZ's bt_uhid_get_report_reply has an off-by-one: it sets
+// rsp->size = MIN(gatt_size, max-1) and copies rsp->size-1 bytes of data, so the kernel
+// receives (gatt_size) bytes total instead of (gatt_size+1). To compensate, the
+// calibration, pairing, and firmware-info characteristics are each one byte larger than
+// the kernel's data payload, with a trailing padding byte that BlueZ silently drops.
+// This makes the kernel see the expected sizes (41 / 20 / 64 bytes total respectively).
+#define DUALSENSE_CALIBRATION_REPORT_SIZE 41
 #define DUALSENSE_PAIRING_INFO_REPORT_ID 0x09
-#define DUALSENSE_PAIRING_INFO_REPORT_SIZE 19
+#define DUALSENSE_PAIRING_INFO_REPORT_SIZE 20
 #define DUALSENSE_FIRMWARE_INFO_REPORT_ID 0x20
-#define DUALSENSE_FIRMWARE_INFO_REPORT_SIZE 63
+#define DUALSENSE_FIRMWARE_INFO_REPORT_SIZE 64
 #define DUALSENSE_BT_PATCH_REPORT_ID 0x22
 #define DUALSENSE_BT_PATCH_REPORT_SIZE 63
 
@@ -108,6 +115,7 @@ static const uint8_t DualsenseEdge_FirmwareInfo[] {
     0x00,
     0x00,
     0x00,
+    0x00,
     0x82,
     0x79,
     0xD9,
@@ -149,6 +157,7 @@ static const uint8_t DualsenseEdge_StockCalibration[] {
     0xF0, // Accel Z Minus
     0xD8,
     0x0B,
+    0x00,
     0x00,
     0x8D,
     0x93,
@@ -255,7 +264,7 @@ static const uint8_t DualsenseEdge_HIDDescriptor[] {
     0x06, 0x80, 0xFF, //   Usage Page (Vendor Defined 0xFF80)
     0x85, 0x05, //   Report ID (5)
     0x09, 0x33, //   Usage (0x33)
-    0x95, 0x28, //   Report Count (40)
+    0x95, 0x29, //   Report Count (41)
     0xB1, 0x02, //   Feature (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position,Non-volatile)
     0x85, 0x08, //   Report ID (8)
     0x09, 0x34, //   Usage (0x34)
@@ -263,11 +272,11 @@ static const uint8_t DualsenseEdge_HIDDescriptor[] {
     0xB1, 0x02, //   Feature (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position,Non-volatile)
     0x85, 0x09, //   Report ID (9)
     0x09, 0x24, //   Usage (0x24)
-    0x95, 0x13, //   Report Count (19)
+    0x95, 0x14, //   Report Count (20)
     0xB1, 0x02, //   Feature (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position,Non-volatile)
     0x85, 0x20, //   Report ID (32)
     0x09, 0x26, //   Usage (0x26)
-    0x95, 0x3F, //   Report Count (63)
+    0x95, 0x40, //   Report Count (64)
     0xB1, 0x02, //   Feature (Data,Var,Abs,No Wrap,Linear,Preferred State,No Null Position,Non-volatile)
     0x85, 0x22, //   Report ID (34)
     0x09, 0x40, //   Usage (0x40)

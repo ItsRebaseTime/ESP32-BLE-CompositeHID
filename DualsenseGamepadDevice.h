@@ -829,6 +829,12 @@ struct DualsenseGamepadPairingReportdata {
     uint8_t mac_address[6];
     uint8_t common[9];
     uint32_t crc32;
+    // Linux note:
+    // BlueZ off-by-one: bt_uhid_get_report_reply delivers (gatt_size) bytes to the kernel
+    // rather than (gatt_size+1), so the kernel sees one fewer byte than we sent. Adding a
+    // trailing padding byte makes the kernel receive the full [report_id + mac + common + crc32]
+    // = 20 bytes it expects. This byte is dropped by BlueZ and never reaches hid-playstation.
+    uint8_t _padding;
 } __attribute__((packed));
 
 static_assert(sizeof(DualsenseGamepadPairingReportdata) == DUALSENSE_PAIRING_INFO_REPORT_SIZE,
