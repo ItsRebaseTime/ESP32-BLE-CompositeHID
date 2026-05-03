@@ -779,9 +779,9 @@ void DualsenseGamepadDevice::populateFeatureReportOnRead(NimBLECharacteristic* p
         ESP_LOGD(LOG_TAG, "Host reading calibration report (0x05) - populating data and sending input report");
         {
             std::lock_guard<std::mutex> lock(_mutex);
-            uint8_t buf[DUALSENSE_CALIBRATION_REPORT_SIZE];
+            uint8_t buf[DUALSENSE_CALIBRATION_REPORT_SIZE] = {};
             buildFeatureReportWithCrc(DUALSENSE_CALIBRATION_REPORT_ID,
-                DualsenseEdge_StockCalibration, DUALSENSE_CALIBRATION_REPORT_SIZE - 4,
+                DualsenseEdge_StockCalibration, DUALSENSE_CALIBRATION_REPORT_SIZE - 5,
                 buf, DUALSENSE_CALIBRATION_REPORT_SIZE);
             pCharacteristic->setValue(buf, DUALSENSE_CALIBRATION_REPORT_SIZE);
         }
